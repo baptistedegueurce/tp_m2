@@ -165,3 +165,101 @@ predire_profondeur <- function(m, data, n = 50) {
   grille$IC95_haut  <- inv(pr$fit + 1.96 * pr$se.fit)
   grille
 }
+
+#' Prépare la variable réponse d'un indice : transformation (log10, ou
+#' proportion ramenée dans ]0 ; 1[ pour la loi bêta), lignes NA retirées.
+preparer_reponse <- function(d, r) {
+  y <- d[[r$indice]]
+  y <- switch(r$transformation, log10 = log10(y), log10p1 = log10(y + 1),
+              `01` = compresser_01(y), y)
+  d$y <- y
+  d[!is.na(d$y), ]
+}
+
+#' Modélise une série d'indices (une ligne de `reponses` = un indice avec sa
+#' loi, sa transformation et son libellé) avec la même démarche pour tous :
+#' sélection AICc, modèle de référence saison + profondeur + (1 | station),
+#' LRT (Holm), emmeans, DHARMa, R², sensibilité aux traits douteux,
+#' prédictions. Les données doivent contenir saison, station, profondeur_m,
+#' lon, lat, douteux.
+#' @return liste de tableaux (resume, tests, selection, coefficients,
+#'   moyennes, contrastes, diagnostics, sensibilite, predictions)
+modeliser_indices <- function(indices, reponses, dossier_diag) {
+  res <- list(selection = list(), tests = list(), coefficients = list(),
+              moyennes = list(), contrastes = list(), diagnostics = list(),
+              sensibilite = list(), predictions = list(), resume = list())
+
+  for (i in seq_len(nrow(reponses))) {
+    r <- reponses[i, ]
+    message(sprintf("\n--- %s (%s) ---", r$indice, r$famille))
+    d <- preparer_reponse(indices, r)
+    fam <- famille_modele(r$famille)
+
+    # 1. Candidats et sélection AICc
+    cand <- lapply(formules_candidates("y"), ajuster_glmm, data = d, famille = fam)
+    sel <- selection_aicc(cand)
+    res$selection[[r$indice]] <- cbind(indice = r$indice, sel)
+
+    # 2. Modèle de référence (fixé a priori)
+    m <- cand$saison_profondeur
+    if (is.null(m)) { warning("Échec du modèle de référence pour ", r$indice); next }
+    avert <- attr(m, "avertissements")
+
+    lrt <- tests_lrt(m)
+    res$tests[[r$indice]] <- cbind(indice = r$indice, famille = r$famille,
+                                   n = nobs(m), lrt)
+    res$coefficients[[r$indice]] <- cbind(indice = r$indice, coefficients_modele(m))
+
+    # 3. Comparaisons entre saisons
+    cs <- tryCatch(comparaisons_saisons(m), error = function(e) NULL)
+    if (!is.null(cs)) {
+      res$moyennes[[r$indice]]   <- cbind(indice = r$indice, cs$moyennes)
+      res$contrastes[[r$indice]] <- cbind(indice = r$indice, cs$contrastes)
+    }
+
+    # 4. Diagnostics
+    diag <- diagnostics_dharma(
+      m, d, file.path(dossier_diag, paste0(make.names(r$indice), ".png")))
+    r2 <- r2_vraisemblance(m, cand$nul)
+    res$diagnostics[[r$indice]] <- data.frame(
+      indice = r$indice, diag, R2_vraisemblance = r2,
+      variance_station = unname(unlist(glmmTMB::VarCorr(m)$cond$station)),
+      avertissements = paste(avert, collapse = " | "))
+
+    # 5. Sensibilité aux traits douteux
+    d2 <- d[!d$douteux, ]
+    m2 <- ajuster_glmm(y ~ saison + profondeur_m + (1 | station), d2, fam)
+    if (!is.null(m2)) {
+      res$sensibilite[[r$indice]] <- cbind(indice = r$indice, n = nobs(m2),
+                                           tests_lrt(m2))
+    }
+
+    # 6. Prédictions le long de la profondeur
+    pr <- predire_profondeur(m, d)
+    res$predictions[[r$indice]] <- cbind(indice = r$indice, label = r$label, pr)
+
+    res$resume[[r$indice]] <- data.frame(
+      indice = r$indice, label = r$label, famille = r$famille, n = nobs(m),
+      meilleur_modele_AICc = sel$modele[1],
+      p_saison = lrt$p[lrt$effet == "saison"],
+      p_profondeur = lrt$p[lrt$effet == "profondeur_m"],
+      R2 = r2,
+      probleme_diagnostic = any(unlist(diag) < 0.05, na.rm = TRUE),
+      ajustement_singulier = any(grepl("singular|convergence|Hessian", avert,
+                                       ignore.case = TRUE)))
+  }
+
+  lier <- function(x) { x <- do.call(rbind, x); rownames(x) <- NULL; x }
+  tabs <- lapply(res, lier)
+
+  # Correction de Holm sur l'ensemble des tests saison / profondeur
+  tabs$tests$p_holm <- p.adjust(tabs$tests$p, method = "holm")
+  tabs$resume <- tabs$resume |>
+    dplyr::left_join(tabs$tests |> dplyr::filter(effet == "saison") |>
+                dplyr::select(indice, p_saison_holm = p_holm), by = "indice") |>
+    dplyr::left_join(tabs$tests |> dplyr::filter(effet == "profondeur_m") |>
+                dplyr::select(indice, p_profondeur_holm = p_holm), by = "indice") |>
+    dplyr::relocate(p_saison_holm, .after = p_saison) |>
+    dplyr::relocate(p_profondeur_holm, .after = p_profondeur)
+  tabs
+}

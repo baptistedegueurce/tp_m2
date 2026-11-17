@@ -10,11 +10,14 @@ R/
   02_preparation_donnees.R     <- nettoyage, effectifs élevés, effort, CPUE
   05_diversite_fonctionnelle.R <- espace fonctionnel, FDis, Rao, FRic, CWM, SES
   05b_modeles_fonctionnels.R   <- modèles mixtes des indices fonctionnels (glmmTMB)
+  07_nourricerie.R             <- juvéniles, structure en taille, condition, croissance
   fonctions/
     copernicus_utils.R         <- fonctions (téléchargement, lecture NetCDF, graphiques)
     preparation_utils.R        <- fonctions de préparation des données de terrain
     fonctionnel_utils.R        <- indices fonctionnels (FDis, Rao, CWM, modèle nul)
     modeles_utils.R            <- modèles mixtes : sélection, tests, emmeans, DHARMa
+    figures_modeles.R          <- figures communes (effet saison, profondeur, synthèse)
+    nourricerie_utils.R        <- condition de Le Cren, spectre de taille, quantiles pondérés
 data/
   raw/copernicus/              <- NetCDF bruts téléchargés
   raw/terrain/                 <- feuille "commun" (taille-poids) + fiches de trait saisies
@@ -121,3 +124,23 @@ Sorties : `data/processed/fonctionnel_indices.csv`, `fonctionnel_espace.csv`,
 Sorties : `data/processed/modeles_fonctionnels/` (`resume.csv` d'abord, puis `tests`, `selection`,
 `coefficients`, `moyennes`, `contrastes`, `diagnostics`, `sensibilite`, `predictions`) ;
 figures dans `outputs/figures/modeles_fonctionnels/` (+ un graphique DHARMa par indice dans `diagnostics/`).
+
+## Script 07 — nourricerie : juvéniles, tailles, condition, croissance
+
+Question : comment la structure fonctionnelle et en taille des communautés de juvéniles
+évolue-t-elle au cours de la saison de nourricerie ? À lancer après le script 02.
+
+Les traits sont ici **mesurés** sur les individus (taille, poids) plutôt que tirés de la
+littérature, car les poissons capturés sont surtout des juvéniles. Un individu est juvénile
+si sa taille est inférieure à la taille de première maturité (`taille_maturite_cm` dans
+`data/ref/traits_fonctionnels.csv`, FishBase, valeurs du golfe de Gascogne en priorité).
+
+| niveau | indicateurs | méthode |
+|---|---|---|
+| trait de chalut | part et densité de juvéniles, espèces en juvéniles, taille moyenne, taille relative (L / L maturité), pente du spectre de taille (NBSS), condition moyenne | modèles mixtes saison + profondeur + (1 \| station), même démarche que 05b |
+| espèce (≥ 50 individus) | distributions de tailles, tailles médianes, croissance apparente des juvéniles | quantiles pondérés par l'élévation |
+| espèce | condition à taille égale par saison | `log10(poids) ~ log10(taille) + saison + (1 \| trait)`, emmeans |
+
+Sorties : `data/processed/nourricerie/`, figures dans `outputs/figures/nourricerie/`.
+La « croissance apparente » suppose qu'on suit la même cohorte : une baisse de taille signale
+l'arrivée d'une nouvelle cohorte, pas une décroissance.
