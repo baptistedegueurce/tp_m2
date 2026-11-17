@@ -8,11 +8,13 @@ R/
   00_config.R                  <- TOUS les paramètres (zone, années, mois, profondeur, variables)
   01_extraction_copernicus.R   <- extraction Copernicus Marine + cartes de contrôle
   02_preparation_donnees.R     <- nettoyage, effectifs élevés, effort, CPUE
-  05_diversite_fonctionnelle.R <- espace fonctionnel, FDis, Rao, FRic, CWM, SES, modèles
+  05_diversite_fonctionnelle.R <- espace fonctionnel, FDis, Rao, FRic, CWM, SES
+  05b_modeles_fonctionnels.R   <- modèles mixtes des indices fonctionnels (glmmTMB)
   fonctions/
     copernicus_utils.R         <- fonctions (téléchargement, lecture NetCDF, graphiques)
     preparation_utils.R        <- fonctions de préparation des données de terrain
     fonctionnel_utils.R        <- indices fonctionnels (FDis, Rao, CWM, modèle nul)
+    modeles_utils.R            <- modèles mixtes : sélection, tests, emmeans, DHARMa
 data/
   raw/copernicus/              <- NetCDF bruts téléchargés
   raw/terrain/                 <- feuille "commun" (taille-poids) + fiches de trait saisies
@@ -98,7 +100,24 @@ Traits, taxons gardés (poissons par défaut), pondération et nombre de permuta
 1. Distance de Gower entre taxons, puis PCoA ; nombre d'axes choisi par l'écart moyen (mAD < 0,05).
 2. Par trait de chalut : richesse S, FDis, entropie de Rao, FRic / FEve / FDiv (package `FD`), CWM.
 3. Modèle nul (traits permutés entre taxons) : SES de FDis et Rao, indépendants de la richesse.
-4. Modèles mixtes `indice ~ saison + profondeur + (1 | station)` (`glmmTMB`), tests du rapport de vraisemblance.
 
-Sorties : `data/processed/fonctionnel_indices.csv`, `fonctionnel_espace.csv`, `fonctionnel_modeles.csv`,
+Sorties : `data/processed/fonctionnel_indices.csv`, `fonctionnel_espace.csv`,
 `fonctionnel_qualite_espace.csv` ; figures dans `outputs/figures/fonctionnel/`.
+
+## Script 05b — modélisation des indices fonctionnels
+
+À lancer après le script 05. Pour chaque indice (liste et loi en tête du script) :
+
+| étape | méthode |
+|---|---|
+| loi | gaussienne (FDis, Rao, SES, CWM continus), bêta (FRic, FEve, FDiv, proportions), Poisson généralisée (richesse) |
+| modèle de référence | `indice ~ saison + profondeur + (1 \| station)` (`glmmTMB`) |
+| tests | rapport de vraisemblance (LRT) par effet, p corrigées de Holm sur tous les indices |
+| sélection | AICc parmi 5 modèles (nul, saison, profondeur, saison + profondeur, interaction) |
+| saisons | moyennes marginales et comparaisons deux à deux (`emmeans`, Tukey) |
+| diagnostics | résidus simulés `DHARMa` : loi, dispersion, extrêmes, autocorrélation spatiale |
+| sensibilité | même modèle sans les traits douteux |
+
+Sorties : `data/processed/modeles_fonctionnels/` (`resume.csv` d'abord, puis `tests`, `selection`,
+`coefficients`, `moyennes`, `contrastes`, `diagnostics`, `sensibilite`, `predictions`) ;
+figures dans `outputs/figures/modeles_fonctionnels/` (+ un graphique DHARMa par indice dans `diagnostics/`).

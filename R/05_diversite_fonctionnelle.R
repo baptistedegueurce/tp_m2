@@ -11,13 +11,12 @@
 #   2. Distance de Gower + PCoA, qualité de l'espace fonctionnel
 #   3. Indices par trait de chalut : FDis, Rao, FRic, FEve, FDiv, CWM
 #   4. Modèle nul : SES de FDis et Rao (indépendants de la richesse)
-#   5. Modèles mixtes : indice ~ saison + profondeur + (1 | station)
-#   6. Figures
+#   5. Figures (la modélisation est dans 05b_modeles_fonctionnels.R)
 #
 # Sorties : data/processed/fonctionnel_*.csv, outputs/figures/fonctionnel/
 # =============================================================================
 
-pkgs <- c("here", "dplyr", "tidyr", "ggplot2", "FD", "glmmTMB")
+pkgs <- c("here", "dplyr", "tidyr", "ggplot2", "FD")
 manquants <- pkgs[!vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)]
 if (length(manquants)) install.packages(manquants)
 
@@ -161,25 +160,8 @@ indices <- indices |>
   mutate(saison = factor(saison, levels = c("printemps", "ete", "automne")))
 
 # =============================================================================
-# 5. Modèles mixtes : effet de la saison et de la profondeur
+# 5. Modélisation : voir 05b_modeles_fonctionnels.R
 # =============================================================================
-reponses <- intersect(c("FDis", "RaoQ", "SES_FDis", "SES_RaoQ",
-                        "CWM_taille_max_cm", "CWM_niveau_trophique"),
-                      names(indices))
-
-ajuster <- function(rep) {
-  d <- indices[!is.na(indices[[rep]]), ]
-  if (rep == "CWM_taille_max_cm") d[[rep]] <- log10(d[[rep]])
-  f <- as.formula(paste(rep, "~ saison + profondeur_m + (1 | station)"))
-  m <- tryCatch(glmmTMB::glmmTMB(f, data = d), error = function(e) NULL)
-  if (is.null(m)) return(NULL)
-  t <- drop1(m, test = "Chisq")
-  data.frame(reponse = rep, effet = rownames(t)[-1], n = nrow(d),
-             chi2 = t$LRT[-1], ddl = t$Df[-1], p = t$`Pr(>Chi)`[-1])
-}
-modeles <- do.call(rbind, lapply(reponses, ajuster))
-modeles$p_holm <- p.adjust(modeles$p, method = "holm")
-rownames(modeles) <- NULL
 
 # =============================================================================
 # 6. Export
@@ -192,8 +174,6 @@ espace <- data.frame(taxon = rownames(X), X[, seq_len(min(4, ncol(X)))],
 write.csv(indices, file.path(dossiers$processed, "fonctionnel_indices.csv"),
           row.names = FALSE, fileEncoding = "UTF-8")
 write.csv(espace, file.path(dossiers$processed, "fonctionnel_espace.csv"),
-          row.names = FALSE, fileEncoding = "UTF-8")
-write.csv(modeles, file.path(dossiers$processed, "fonctionnel_modeles.csv"),
           row.names = FALSE, fileEncoding = "UTF-8")
 write.csv(qualite, file.path(dossiers$processed, "fonctionnel_qualite_espace.csv"),
           row.names = FALSE, fileEncoding = "UTF-8")
@@ -318,5 +298,4 @@ print(indices |>
                   SES_RaoQ = mean(SES_RaoQ, na.rm = TRUE)) |>
         mutate(across(where(is.numeric), ~ round(.x, 2))) |>
         as.data.frame())
-message("\nModèles mixtes (test du rapport de vraisemblance) :")
-print(modeles |> mutate(across(c(chi2, p, p_holm), ~ signif(.x, 3))))
+message("\nModélisation (saison, profondeur, station) : lancer R/05b_modeles_fonctionnels.R")
