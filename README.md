@@ -7,10 +7,14 @@ TP_environnement.Rproj
 R/
   00_config.R                  <- TOUS les paramètres (zone, années, mois, profondeur, variables)
   01_extraction_copernicus.R   <- extraction Copernicus Marine + cartes de contrôle
+  02_preparation_donnees.R     <- nettoyage, effectifs élevés, effort, CPUE
   fonctions/
     copernicus_utils.R         <- fonctions (téléchargement, lecture NetCDF, graphiques)
+    preparation_utils.R        <- fonctions de préparation des données de terrain
 data/
   raw/copernicus/              <- NetCDF bruts téléchargés
+  raw/terrain/                 <- feuille "commun" (taille-poids) + fiches de trait saisies
+  ref/taxons.csv               <- correspondance nom saisi -> taxon (à compléter)
   processed/                   <- tableaux propres (.rds / .csv)
 outputs/figures/copernicus/    <- cartes et résumé
 ```
@@ -63,3 +67,22 @@ Les mois non consécutifs sont regroupés en périodes continues : on ne téléc
 `data/processed/copernicus_mensuel.rds` : un tableau long avec les colonnes
 `variable, var_nc, label, unite, lon, lat, profondeur, date, annee, mois, valeur`
 (une ligne par pixel × mois × variable). C'est ce fichier que liront les scripts suivants.
+
+## Script 02 — préparation des données de terrain
+
+Lit `data/raw/terrain/taille_poids_commun.csv` (feuille « commun »), `metadonnees_traits.csv`
+(fiches de trait recopiées) et `data/ref/taxons.csv`, puis écrit dans `data/processed/` :
+
+| fichier | contenu |
+|---|---|
+| `traits.csv` | une ligne par trait : durée, distance, profondeur, position, statut |
+| `captures.csv` | trait × taxon : effectif élevé, biomasse, CPUE par km (zéros inclus) |
+| `individus.csv` | individus mesurés + facteur d'élévation + aberrants marqués |
+| `taxons.csv` | taxons présents |
+| `matrice_cpue.csv` | matrice traits × taxons (ind/km), prête pour `vegan` |
+| `controle_anomalies.csv` | **tout ce qui a été corrigé ou supposé : à relire** |
+
+Règles d'effectif : l'effectif noté = total de l'échantillon (mesurés + non mesurés) ;
+s'il est absent, on compte les lignes ; s'il est recopié sur toutes les lignes, il compte une fois ;
+plusieurs effectifs différents pour un même couple saison × station × espèce sont additionnés et signalés.
+Un nouveau nom d'espèce dans la base doit d'abord être ajouté à `data/ref/taxons.csv`.

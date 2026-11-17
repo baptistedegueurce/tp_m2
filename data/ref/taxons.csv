@@ -1,0 +1,23 @@
+nom_saisi,taxon,nom_commun,rang,groupe,remarque
+callionyme,Callionymus spp.,callionyme,genre,poisson,Probablement surtout C. lyra : à confirmer
+sole,Solea solea,sole,espece,poisson,
+gobie,Gobiidae,gobie,famille,poisson,Probablement Pomatoschistus spp. : à confirmer
+arnoglosse,Arnoglossus spp.,arnoglosse,genre,poisson,Probablement A. laterna : à confirmer
+tacaud,Trisopterus luscus,tacaud,espece,poisson,
+grondin,Triglidae,grondin,famille,poisson,Espèce non précisée
+chinchard,Trachurus trachurus,chinchard,espece,poisson,
+anchois,Engraulis encrasicolus,anchois,espece,poisson,
+rouget,Mullus surmuletus,rouget,espece,poisson,
+merlu,Merluccius merluccius,merlu,espece,poisson,
+dorade,Sparidae,dorade,famille,poisson,Espèce non précisée (griset ? daurade royale ?)
+saint-pierre,Zeus faber,saint-pierre,espece,poisson,
+sprat,Sprattus sprattus,sprat,espece,poisson,
+lieu jaune,Pollachius pollachius,lieu jaune,espece,poisson,
+vive,Trachinidae,vive,famille,poisson,Probablement Echiichthys vipera : à confirmer
+cardine,Lepidorhombus whiffiagonis,cardine,espece,poisson,
+cephalopode,Cephalopoda,céphalopode,classe,cephalopode,
+céphalopode,Cephalopoda,céphalopode,classe,cephalopode,Variante d'orthographe
+crevette,Caridea,crevette,infra-ordre,crustace,À fusionner avec crangon ?
+crangon,Crangon crangon,crevette grise,espece,crustace,Une seule ligne (été I) : à fusionner avec crevette ?
+crabe,Brachyura,crabe,infra-ordre,crustace,
+crabe nageur,Liocarcinus spp.,crabe nageur,genre,crustace,Probablement Liocarcinus : à confirmer

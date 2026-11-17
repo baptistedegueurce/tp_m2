@@ -116,3 +116,36 @@ catalogue_variables <- data.frame(
 
   stringsAsFactors = FALSE
 )
+
+# =============================================================================
+# Préparation des données de terrain (script 02)
+# =============================================================================
+fichiers_terrain <- list(
+  taille_poids = here::here("data", "raw", "terrain", "taille_poids_commun.csv"),
+  metadonnees  = here::here("data", "raw", "terrain", "metadonnees_traits.csv"),
+  taxons       = here::here("data", "ref", "taxons.csv")
+)
+
+# Ouverture horizontale du chalut (m). NA = inconnue -> CPUE par km chalutés.
+# Si renseignée -> CPUE aussi pour 1 000 m² balayés.
+ouverture_chalut_m <- NA
+
+# Traits sans aucune ligne dans la base taille-poids que l'on CONFIRME vides
+# (rien pêché). Ils entrent alors dans les analyses avec des zéros.
+# Format "saison_station", ex. c("p_F", "p_M"). Les autres restent NA.
+traits_vides_confirmes <- c()
+
+# Traits signalés comme douteux (engin modifié, trait abrégé…)
+traits_douteux <- c(
+  p_A = "Chalut alourdi (manilles et chaînes, 5 kg)",
+  p_O = "Ligne de sonde trop courte",
+  e_A = "Fune allongée en cours de trait",
+  e_N = "Chaîne gréée au chalut",
+  e_G = "Fune trop longue",
+  e_L = "Trait abrégé, chalut rempli de cténaires"
+)
+exclure_traits_douteux <- FALSE  # TRUE = retirés des tables d'analyse
+
+# Seuil de détection des individus aberrants sur la relation taille-poids
+# (résidus studentisés de log(poids) ~ log(taille), par taxon)
+seuil_aberrant_taille_poids <- 4
