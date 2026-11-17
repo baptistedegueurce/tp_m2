@@ -4,7 +4,7 @@
 #
 # Entrées (voir R/00_config.R) :
 #   data/raw/terrain/taille_poids_commun.csv   feuille "commun" (mensurations)
-#   data/raw/terrain/metadonnees_traits.csv    fiches de trait (saisies)
+#   data/raw/terrain/metadonnees.csv           fiches de trait
 #   data/ref/taxons.csv                        nom saisi -> taxon
 #
 # Sorties (data/processed/) :
@@ -49,7 +49,36 @@ saisons <- c(p = "printemps", e = "ete", a = "automne")
 # 1. Métadonnées des traits : effort de pêche
 # =============================================================================
 meta <- read.csv(fichiers_terrain$metadonnees, colClasses = "character",
-                 encoding = "UTF-8", na.strings = c("", "NA"))
+                 encoding = "UTF-8", fileEncoding = "UTF-8",
+                 check.names = FALSE, na.strings = c("", "NA"))
+
+# Les colonnes sont lues dans l'ordre du fichier (les intitulés avec accents
+# et unités varient d'un export à l'autre).
+colonnes_meta <- c("saison", "station", "date", "vitesse_noeuds",
+                   "filage_heure", "filage_prof_m", "filage_lat_N",
+                   "filage_lon_O", "virage_heure", "virage_prof_m",
+                   "virage_lat_N", "virage_lon_O", "sous_echantillonnage",
+                   "nb_sachets", "commentaire")
+if (ncol(meta) != length(colonnes_meta)) {
+  stop("Le fichier de métadonnées doit avoir ", length(colonnes_meta),
+       " colonnes dans cet ordre :\n  ", paste(colonnes_meta, collapse = ", "),
+       "\n(", ncol(meta), " trouvées)")
+}
+names(meta) <- colonnes_meta
+
+meta <- meta |>
+  mutate(
+    saison  = lire_saison(saison),
+    station = toupper(trimws(station)),
+    filage_heure = lire_heure(filage_heure),
+    virage_heure = lire_heure(virage_heure),
+    nb_sachets   = as.character(lire_nombre(nb_sachets)),   # "—" -> NA
+    fune_m  = lire_fune(commentaire)
+  )
+if (anyNA(meta$saison)) stop("Saison non reconnue dans les métadonnées")
+if (any(duplicated(paste(meta$saison, meta$station)))) {
+  stop("Station en double dans les métadonnées")
+}
 
 traits <- meta |>
   mutate(
@@ -81,6 +110,20 @@ for (i in which(traits$duree_min <= 0 | traits$duree_min > 60)) {
   signaler("duree_anormale", sprintf("Durée de %.0f min", traits$duree_min[i]),
            traits$saison[i], traits$station[i], action = "À vérifier sur la fiche")
 }
+# Deux traits qui se chevauchent dans le temps = erreur de date ou d'heure
+chev <- traits |>
+  select(trait_id, saison, station, filage_dt, virage_dt) |>
+  merge(select(traits, autre = trait_id, f2 = filage_dt, v2 = virage_dt),
+        by = NULL) |>
+  filter(trait_id < autre, filage_dt < v2, f2 < virage_dt)
+for (i in seq_len(nrow(chev))) {
+  signaler("traits_simultanes",
+           sprintf("%s et %s se chevauchent (%s)", chev$trait_id[i],
+                   chev$autre[i], format(chev$filage_dt[i], "%d/%m %H:%M")),
+           chev$saison[i], chev$station[i],
+           action = "Erreur de date ou d'heure sur la fiche : à corriger")
+}
+
 ratio <- traits$distance_gps_km / traits$distance_vitesse_km
 for (i in which(ratio < 0.6 | ratio > 1.4)) {
   signaler("distance_incoherente",

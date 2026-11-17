@@ -122,7 +122,7 @@ catalogue_variables <- data.frame(
 # =============================================================================
 fichiers_terrain <- list(
   taille_poids = here::here("data", "raw", "terrain", "taille_poids_commun.csv"),
-  metadonnees  = here::here("data", "raw", "terrain", "metadonnees_traits.csv"),
+  metadonnees  = here::here("data", "raw", "terrain", "metadonnees.csv"),
   taxons       = here::here("data", "ref", "taxons.csv")
 )
 
@@ -137,7 +137,7 @@ traits_vides_confirmes <- c()
 
 # Traits signalés comme douteux (engin modifié, trait abrégé…)
 traits_douteux <- c(
-  p_A = "Chalut alourdi (manilles et chaînes, 5 kg)",
+  p_A = "Chalut alourdi (mailles et chaînes, 5 kg)",
   p_O = "Ligne de sonde trop courte",
   e_A = "Fune allongée en cours de trait",
   e_N = "Chaîne gréée au chalut",

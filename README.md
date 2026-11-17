@@ -70,7 +70,7 @@ Les mois non consécutifs sont regroupés en périodes continues : on ne téléc
 
 ## Script 02 — préparation des données de terrain
 
-Lit `data/raw/terrain/taille_poids_commun.csv` (feuille « commun »), `metadonnees_traits.csv`
+Lit `data/raw/terrain/taille_poids_commun.csv` (feuille « commun »), `metadonnees.csv`
 (fiches de trait recopiées) et `data/ref/taxons.csv`, puis écrit dans `data/processed/` :
 
 | fichier | contenu |

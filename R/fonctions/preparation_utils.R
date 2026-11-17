@@ -5,8 +5,33 @@
 #' Nombre saisi avec virgule ou point décimal -> numeric ("" -> NA).
 lire_nombre <- function(x) {
   x <- trimws(gsub(",", ".", x))
-  x[x %in% c("", "NA", "-", "–")] <- NA
+  x[x %in% c("", "NA", "-", "\u2013", "\u2014")] <- NA   # vide, tirets – et —
   suppressWarnings(as.numeric(x))
+}
+
+#' Saison saisie ("Printemps (avril)", "Été (juillet)", "p"...) -> code p / e / a.
+lire_saison <- function(x) {
+  x <- tolower(trimws(x))
+  out <- rep(NA_character_, length(x))
+  out[grepl("print|avr", x) | x == "p"] <- "p"
+  out[grepl("juil", x) | grepl("^.t.$", x) | x %in% c("e", "ete")] <- "e"
+  out[grepl("aut|sept", x) | x == "a"] <- "a"
+  out
+}
+
+#' Heure "7h05", "07:05", "7h5" -> "07:05".
+lire_heure <- function(x) {
+  m <- regmatches(x, regexec("^\\s*(\\d{1,2})\\s*[hH:]\\s*(\\d{1,2})", x))
+  vapply(m, function(v) if (length(v) == 3)
+    sprintf("%02d:%02d", as.integer(v[2]), as.integer(v[3])) else NA_character_,
+    character(1))
+}
+
+#' Longueur de fune (m) extraite d'un commentaire "Fune : 40 m, ...".
+lire_fune <- function(x) {
+  m <- regmatches(x, regexec("[Ff]une\\s*:?\\s*(\\d+)", x))
+  vapply(m, function(v) if (length(v) == 2) as.numeric(v[2]) else NA_real_,
+         numeric(1))
 }
 
 #' Date jj/mm/aaaa ou jj/mm/aa -> Date.
