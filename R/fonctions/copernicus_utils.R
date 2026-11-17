@@ -7,25 +7,77 @@
 # Toolbox Copernicus Marine (CLI Python `copernicusmarine`)
 # -----------------------------------------------------------------------------
 
+#' Dossiers "Scripts"/"bin" des Python installés (là où pip met les exécutables).
+dossiers_scripts_python <- function() {
+  code <- tempfile(fileext = ".py")
+  on.exit(unlink(code))
+  writeLines(c(
+    "import sysconfig",
+    "print(sysconfig.get_path('scripts'))",
+    "for s in sysconfig.get_scheme_names():",
+    "    if s.endswith('_user'):",
+    "        try: print(sysconfig.get_path('scripts', s))",
+    "        except Exception: pass"
+  ), code)
+
+  pythons <- unique(Sys.which(c("python3", "python", "py")))
+  pythons <- pythons[nzchar(pythons)]
+  unlist(lapply(pythons, function(py) {
+    tryCatch(suppressWarnings(system2(py, shQuote(code), stdout = TRUE,
+                                      stderr = FALSE)),
+             error = function(e) character(0))
+  }))
+}
+
 #' Trouve l'exécutable `copernicusmarine`, ou s'arrête avec un message clair.
+#' Cherche : chemin donné dans la config > PATH > dossiers de Python / conda.
 trouver_copernicusmarine <- function(chemin = "") {
   if (nzchar(chemin)) {
-    if (!file.exists(chemin)) stop("Exécutable introuvable : ", chemin)
-    return(chemin)
+    if (!file.exists(chemin)) stop("Exécutable introuvable : ", chemin,
+                                   call. = FALSE)
+    return(normalizePath(chemin))
   }
+
   exe <- Sys.which("copernicusmarine")
-  if (!nzchar(exe)) {
-    stop(
-      "La toolbox `copernicusmarine` est introuvable.\n",
-      "  1) Installer : pip install copernicusmarine\n",
-      "  2) Se connecter une fois : copernicusmarine login\n",
-      "     (ou renseigner COPERNICUSMARINE_SERVICE_USERNAME / _PASSWORD dans .Renviron)\n",
-      "  3) Si R ne la trouve toujours pas, renseigner `chemin_copernicusmarine`\n",
-      "     dans R/00_config.R",
-      call. = FALSE
-    )
+  if (nzchar(exe)) return(unname(exe))
+
+  # Emplacements habituels (pip, pip --user, conda) — Windows, Mac, Linux
+  maison  <- path.expand("~")
+  appdata <- Sys.getenv(c("APPDATA", "LOCALAPPDATA"))
+  dossiers <- c(
+    dossiers_scripts_python(),
+    file.path(maison, ".local", "bin"),
+    Sys.glob(file.path(maison, "Library", "Python", "*", "bin")),
+    Sys.glob(file.path(maison, c("miniconda3", "anaconda3", "miniforge3",
+                                 "mambaforge"), c("bin", "Scripts"))),
+    Sys.glob(file.path(maison, c("miniconda3", "anaconda3", "miniforge3",
+                                 "mambaforge"), "envs", "*", c("bin", "Scripts"))),
+    Sys.glob(file.path(appdata[nzchar(appdata)], "Python", "*", "Scripts")),
+    Sys.glob(file.path(appdata[nzchar(appdata)], "Programs", "Python", "*",
+                       "Scripts")),
+    "/opt/homebrew/bin", "/usr/local/bin"
+  )
+  candidats <- file.path(unique(dossiers),
+                         rep(c("copernicusmarine", "copernicusmarine.exe"),
+                             each = length(unique(dossiers))))
+  trouve <- candidats[file.exists(candidats) & !dir.exists(candidats)]
+  if (length(trouve)) {
+    message("copernicusmarine trouvé : ", trouve[1])
+    return(normalizePath(trouve[1]))
   }
-  unname(exe)
+
+  stop(
+    "La toolbox `copernicusmarine` est introuvable.\n",
+    "  1) Installer, dans un terminal : pip install copernicusmarine\n",
+    "  2) Se connecter une fois : copernicusmarine login\n",
+    "     (ou renseigner COPERNICUSMARINE_SERVICE_USERNAME / _PASSWORD dans .Renviron)\n",
+    "  3) Si R ne la trouve toujours pas, chercher son chemin dans un terminal :\n",
+    "       Windows : where copernicusmarine\n",
+    "       Mac/Linux : which copernicusmarine\n",
+    "     puis le copier dans `chemin_copernicusmarine` (R/00_config.R),\n",
+    "     avec des / à la place des \\ sous Windows.",
+    call. = FALSE
+  )
 }
 
 #' Regroupe les couples (année, mois) en périodes de mois consécutifs,
