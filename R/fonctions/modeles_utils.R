@@ -113,7 +113,11 @@ comparaisons_saisons <- function(m) {
 #' Diagnostics par résidus simulés (DHARMa, Hartig 2022).
 #' Un p < 0,05 signale un problème : mauvaise loi (uniformité), sur- ou
 #' sous-dispersion, valeurs extrêmes, autocorrélation spatiale résiduelle.
-diagnostics_dharma <- function(m, data, fichier_png = NULL) {
+#' @param groupe nom d'une colonne de `data` (ex. "trait_id") : pour des
+#'   données individuelles, l'autocorrélation spatiale est testée sur les
+#'   résidus regroupés par trait de chalut (individus d'un même trait =
+#'   mêmes coordonnées).
+diagnostics_dharma <- function(m, data, fichier_png = NULL, groupe = NULL) {
   # Simulations faites par glmmTMB::simulate puis passées à DHARMa : évite les
   # incompatibilités entre versions de DHARMa et de glmmTMB.
   sims <- as.matrix(simulate(m, nsim = 1000))
@@ -128,8 +132,16 @@ diagnostics_dharma <- function(m, data, fichier_png = NULL) {
     p_uniformite = pv(DHARMa::testUniformity(sim, plot = FALSE)),
     p_dispersion = pv(DHARMa::testDispersion(sim, plot = FALSE)),
     p_extremes   = pv(DHARMa::testOutliers(sim, type = "bootstrap", plot = FALSE)),
-    p_autocorrelation_spatiale = pv(DHARMa::testSpatialAutocorrelation(
-      sim, x = data$lon, y = data$lat, plot = FALSE))
+    p_autocorrelation_spatiale = pv(if (is.null(groupe)) {
+      DHARMa::testSpatialAutocorrelation(sim, x = data$lon, y = data$lat,
+                                         plot = FALSE)
+    } else {
+      g <- factor(data[[groupe]])
+      simg <- DHARMa::recalculateResiduals(sim, group = g)
+      DHARMa::testSpatialAutocorrelation(simg, x = tapply(data$lon, g, mean),
+                                         y = tapply(data$lat, g, mean),
+                                         plot = FALSE)
+    })
   )
   if (!is.null(fichier_png)) {
     png(fichier_png, width = 1600, height = 800, res = 150)

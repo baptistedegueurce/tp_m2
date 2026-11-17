@@ -5,20 +5,20 @@
 # -----------------------------------------------------------------------------
 
 # --- Zone d'étude (degrés décimaux, WGS84) -----------------------------------
-# /!\ À ADAPTER à la zone du TP. Les modèles biogéochimiques sont à 0.25°
-#     (~25 km) : prendre une boîte d'au moins ~1° de côté pour avoir des pixels.
+# Estuaire externe de la Loire, avec une marge autour des 14 stations
+# (lon -2,49 à -2,26 ; lat 47,12 à 47,21) pour avoir des pixels même à 0,25°.
 zone <- list(
-  lon_min = -6.0,
-  lon_max = -2.0,
-  lat_min = 46.5,
-  lat_max = 49.0
+  lon_min = -2.9,
+  lon_max = -1.9,
+  lat_min = 46.9,
+  lat_max = 47.5
 )
 
 # --- Période : années × mois à extraire --------------------------------------
 # Toutes les combinaisons annee × mois sont extraites.
 # Ex. : mois <- 1:12 (année complète), mois <- c(3, 4, 5) (printemps), etc.
-annees <- c(2025)
-mois   <- c(3, 4, 5, 6)
+annees <- c(2026)
+mois   <- c(4, 7, 9)     # campagnes du TP : avril, juillet, septembre
 
 # --- Profondeur --------------------------------------------------------------
 # Plage de profondeur (m) téléchargée pour les variables 3D (température,
@@ -46,7 +46,7 @@ source_copernicus <- "reanalyse"
 variables_a_extraire <- c(
   "temperature",          # température potentielle (°C)
   "salinite",             # salinité
-  "temperature_fond",     # température au fond (°C)
+  "temperature_fond",     # température au fond (°C) : la plus pertinente pour des poissons benthiques
   "couche_melange",       # profondeur de la couche de mélange (m)
   "bathymetrie",          # profondeur du fond (m) — statique
   "chlorophylle",         # chlorophylle a (mg/m3)
@@ -173,3 +173,30 @@ ponderation_fonctionnelle <- "abondance"
 # Modèle nul pour les SES (permutation des traits entre taxons)
 n_permutations_ses <- 999
 graine_aleatoire   <- 42
+
+# =============================================================================
+# Variables environnementales par trait de chalut (script 06)
+# =============================================================================
+# Point de référence pour la distance à l'embouchure : entrée de l'estuaire
+# de la Loire à Saint-Nazaire (à ajuster si vous préférez un autre point).
+point_embouchure <- c(lat = 47.270, lon = -2.200)
+
+# Variables Copernicus (noms du script 01) rattachées à chaque trait :
+# valeur du mois du trait, pixel le plus proche du milieu du trait.
+variables_copernicus_traits <- c("temperature_fond", "temperature", "salinite",
+                                 "chlorophylle", "oxygene")
+
+# =============================================================================
+# Condition et tailles par espèce (script 08)
+# =============================================================================
+n_min_individus_espece <- 50      # espèces analysées : au moins n individus
+
+# Covariables spatiales toujours présentes dans les modèles
+covariables_spatiales <- c("profondeur_m", "distance_embouchure_km")
+
+# Au-delà de ce |r| entre deux covariables, la seconde est retirée
+seuil_correlation <- 0.7
+
+# TRUE = seulement les juvéniles (taille < taille de 1re maturité) : évite de
+# comparer des cohortes différentes (ex. tacauds 1+ au printemps, 0+ en été)
+restreindre_juveniles <- FALSE

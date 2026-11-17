@@ -10,7 +10,9 @@ R/
   02_preparation_donnees.R     <- nettoyage, effectifs élevés, effort, CPUE
   05_diversite_fonctionnelle.R <- espace fonctionnel, FDis, Rao, FRic, CWM, SES
   05b_modeles_fonctionnels.R   <- modèles mixtes des indices fonctionnels (glmmTMB)
+  06_variables_environnementales.R <- table environnementale par trait (terrain + Copernicus)
   07_nourricerie.R             <- juvéniles, structure en taille, condition, croissance
+  08_condition_tailles_especes.R <- condition et taille par espèce ~ saison, profondeur, environnement
   fonctions/
     copernicus_utils.R         <- fonctions (téléchargement, lecture NetCDF, graphiques)
     preparation_utils.R        <- fonctions de préparation des données de terrain
@@ -144,3 +146,32 @@ si sa taille est inférieure à la taille de première maturité (`taille_maturi
 Sorties : `data/processed/nourricerie/`, figures dans `outputs/figures/nourricerie/`.
 La « croissance apparente » suppose qu'on suit la même cohorte : une baisse de taille signale
 l'arrivée d'une nouvelle cohorte, pas une décroissance.
+
+## Script 06 — variables environnementales par trait de chalut
+
+Une ligne par trait : profondeur, fune, jour de l'année, distance à l'embouchure
+(depuis `point_embouchure`, Saint-Nazaire par défaut) et, si le script 01 a été lancé,
+les variables Copernicus du **mois du trait** au **pixel le plus proche**.
+Exporte aussi les corrélations entre covariables et la part de chaque variable expliquée
+par la saison. À 1/12° ou 1/4°, les variables Copernicus varient surtout entre campagnes,
+très peu entre stations.
+
+Ordre : `01` (Copernicus, zone et mois du TP réglés) → `02` → `06` → `08`.
+
+## Script 08 — condition et tailles par espèce
+
+Pour chaque espèce avec au moins `n_min_individus_espece` individus, à l'échelle de l'individu :
+
+- condition : `log10(poids) ~ log10(taille) + covariables + (1 | trait)` (poids à taille égale)
+- taille : `log10(taille) ~ covariables + (1 | trait)`
+
+Modèles comparés par AICc, identiques pour toutes les espèces : nul, profondeur,
+saison + profondeur (référence), puis chaque variable Copernicus seule + profondeur
+(elles sont corrélées entre elles et à la saison, on ne les combine pas). Covariables
+centrées-réduites : effets en % pour +1 écart-type, comparables entre espèces.
+Profondeur et distance à l'embouchure étant corrélées (rho ≈ 0,85), seule la première
+de `covariables_spatiales` est gardée au-delà de `seuil_correlation`.
+Option `restreindre_juveniles` pour ne comparer que des juvéniles.
+
+Sorties : `data/processed/condition_especes/` (`resume.csv`, `selection`, `tests`, `effets`,
+`saisons`, `diagnostics`, `echelles_covariables`) ; figures dans `outputs/figures/condition_especes/`.
