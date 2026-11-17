@@ -1,0 +1,5 @@
+# Copier ce fichier en ".Renviron" (à la racine du projet) puis redémarrer R.
+# Alternative : lancer une fois `copernicusmarine login` dans un terminal.
+# /!\ Ne jamais partager / committer le vrai fichier .Renviron.
+COPERNICUSMARINE_SERVICE_USERNAME=mon_identifiant
+COPERNICUSMARINE_SERVICE_PASSWORD=mon_mot_de_passe

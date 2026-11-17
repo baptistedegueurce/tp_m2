@@ -1,0 +1,12 @@
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+.Renviron
+
+# données téléchargées / générées
+data/raw/copernicus/*.nc
+data/processed/*
+!data/processed/.gitkeep
+outputs/figures/**/*.png
+Rplots.pdf
