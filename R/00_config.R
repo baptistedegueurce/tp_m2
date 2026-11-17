@@ -149,3 +149,27 @@ exclure_traits_douteux <- FALSE  # TRUE = retirés des tables d'analyse
 # Seuil de détection des individus aberrants sur la relation taille-poids
 # (résidus studentisés de log(poids) ~ log(taille), par taxon)
 seuil_aberrant_taille_poids <- 4
+
+# =============================================================================
+# Diversité fonctionnelle (script 05)
+# =============================================================================
+fichier_traits_fonctionnels <- here::here("data", "ref", "traits_fonctionnels.csv")
+
+# Traits utilisés pour construire l'espace fonctionnel
+traits_utilises <- c("taille_max_cm", "niveau_trophique", "guilde_trophique",
+                     "position_verticale", "guilde_estuarienne",
+                     "mode_reproduction")
+
+# Groupes gardés (colonne `groupe` de data/ref/taxons.csv) :
+# "poisson" seul conseillé (tailles max non comparables avec les invertébrés)
+groupes_analyse_fonctionnelle <- c("poisson")
+
+# Taxons exclus selon la confiance d'attribution des traits
+confiance_exclue <- c("inconnue", "faible")
+
+# Pondération des indices : "abondance" (CPUE n/km) ou "biomasse" (CPUE g/km)
+ponderation_fonctionnelle <- "abondance"
+
+# Modèle nul pour les SES (permutation des traits entre taxons)
+n_permutations_ses <- 999
+graine_aleatoire   <- 42

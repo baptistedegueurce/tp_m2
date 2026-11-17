@@ -8,13 +8,16 @@ R/
   00_config.R                  <- TOUS les paramètres (zone, années, mois, profondeur, variables)
   01_extraction_copernicus.R   <- extraction Copernicus Marine + cartes de contrôle
   02_preparation_donnees.R     <- nettoyage, effectifs élevés, effort, CPUE
+  05_diversite_fonctionnelle.R <- espace fonctionnel, FDis, Rao, FRic, CWM, SES, modèles
   fonctions/
     copernicus_utils.R         <- fonctions (téléchargement, lecture NetCDF, graphiques)
     preparation_utils.R        <- fonctions de préparation des données de terrain
+    fonctionnel_utils.R        <- indices fonctionnels (FDis, Rao, CWM, modèle nul)
 data/
   raw/copernicus/              <- NetCDF bruts téléchargés
   raw/terrain/                 <- feuille "commun" (taille-poids) + fiches de trait saisies
   ref/taxons.csv               <- correspondance nom saisi -> taxon (à compléter)
+  ref/traits_fonctionnels.csv  <- traits par taxon (FishBase / SeaLifeBase v24.07)
   processed/                   <- tableaux propres (.rds / .csv)
 outputs/figures/copernicus/    <- cartes et résumé
 ```
@@ -86,3 +89,16 @@ Règles d'effectif : l'effectif noté = total de l'échantillon (mesurés + non 
 s'il est absent, on compte les lignes ; s'il est recopié sur toutes les lignes, il compte une fois ;
 plusieurs effectifs différents pour un même couple saison × station × espèce sont additionnés et signalés.
 Un nouveau nom d'espèce dans la base doit d'abord être ajouté à `data/ref/taxons.csv`.
+
+## Script 05 — diversité fonctionnelle
+
+À lancer après le script 02. Lit `data/processed/preparation.rds` et `data/ref/traits_fonctionnels.csv`.
+Traits, taxons gardés (poissons par défaut), pondération et nombre de permutations : `R/00_config.R`.
+
+1. Distance de Gower entre taxons, puis PCoA ; nombre d'axes choisi par l'écart moyen (mAD < 0,05).
+2. Par trait de chalut : richesse S, FDis, entropie de Rao, FRic / FEve / FDiv (package `FD`), CWM.
+3. Modèle nul (traits permutés entre taxons) : SES de FDis et Rao, indépendants de la richesse.
+4. Modèles mixtes `indice ~ saison + profondeur + (1 | station)` (`glmmTMB`), tests du rapport de vraisemblance.
+
+Sorties : `data/processed/fonctionnel_indices.csv`, `fonctionnel_espace.csv`, `fonctionnel_modeles.csv`,
+`fonctionnel_qualite_espace.csv` ; figures dans `outputs/figures/fonctionnel/`.
