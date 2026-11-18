@@ -1,8 +1,8 @@
 # =============================================================================
-# 05b_modeles_fonctionnels.R
+# 06b_modeles_fonctionnels.R
 # Modélisation des indices fonctionnels : saison, profondeur, station
 #
-# À lancer après 05_diversite_fonctionnelle.R
+# À lancer après 06_diversite_fonctionnelle.R
 # Entrée : data/processed/fonctionnel_indices.csv
 #
 # Démarche (pour chaque indice) :

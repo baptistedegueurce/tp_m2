@@ -8,18 +8,19 @@ R/
   00_config.R                  <- TOUS les paramètres (zone, années, mois, profondeur, variables)
   01_extraction_copernicus.R   <- extraction Copernicus Marine + cartes de contrôle
   02_preparation_donnees.R     <- nettoyage, effectifs élevés, effort, CPUE
-  05_diversite_fonctionnelle.R <- espace fonctionnel, FDis, Rao, FRic, CWM, SES
-  05b_modeles_fonctionnels.R   <- modèles mixtes des indices fonctionnels (glmmTMB)
-  06_variables_environnementales.R <- table environnementale par trait (terrain + Copernicus)
-  07_nourricerie.R             <- juvéniles, structure en taille, condition, croissance
-  08_condition_tailles_especes.R <- condition et taille par espèce ~ saison, profondeur, environnement
+  03_variables_environnementales.R <- table environnementale par trait (terrain + Copernicus)
+  04_communautes.R             <- richesse, Shannon, Piélou, densités, juvéniles ~ saison + profondeur
+  05_condition_tailles_especes.R <- condition et taille par espèce ~ saison + profondeur
+  06_diversite_fonctionnelle.R <- (annexe) espace fonctionnel, FDis, Rao, FRic, CWM, SES
+  06b_modeles_fonctionnels.R   <- (annexe) modèles des indices fonctionnels (glmmTMB)
   fonctions/
     copernicus_utils.R         <- fonctions (téléchargement, lecture NetCDF, graphiques)
     preparation_utils.R        <- fonctions de préparation des données de terrain
     fonctionnel_utils.R        <- indices fonctionnels (FDis, Rao, CWM, modèle nul)
-    modeles_utils.R            <- modèles mixtes : sélection, tests, emmeans, DHARMa
-    figures_modeles.R          <- figures communes (effet saison, profondeur, synthèse)
-    nourricerie_utils.R        <- condition de Le Cren, spectre de taille, quantiles pondérés
+    modeles_simples.R          <- modèles lme4 des scripts 04 et 05 : ajustement, tests, Tukey, DHARMa
+    modeles_utils.R            <- modèles glmmTMB du script 06b (annexe)
+    figures_modeles.R          <- figures du script 06b (annexe)
+    nourricerie_utils.R        <- condition de Le Cren, quantiles pondérés
 data/
   raw/copernicus/              <- NetCDF bruts téléchargés
   raw/terrain/                 <- feuille "commun" (taille-poids) + fiches de trait saisies
@@ -97,7 +98,59 @@ s'il est absent, on compte les lignes ; s'il est recopié sur toutes les lignes,
 plusieurs effectifs différents pour un même couple saison × station × espèce sont additionnés et signalés.
 Un nouveau nom d'espèce dans la base doit d'abord être ajouté à `data/ref/taxons.csv`.
 
-## Script 05 — diversité fonctionnelle
+## Ordre des scripts du CR
+
+`01` (Copernicus) → `02` (préparation) → `03` (environnement) → `04` (communautés) → `05` (espèces).
+
+Les scripts 04 et 05 utilisent la même démarche, volontairement simple (`R/fonctions/modeles_simples.R`) :
+
+| étape | méthode |
+|---|---|
+| modèle | `réponse ~ saison + profondeur + effet aléatoire` (`lme4::lmer`, `glmer` Poisson pour la richesse) |
+| effet aléatoire | `(1 \| station)` pour les indices par trait (04) ; `(1 \| trait)` pour les individus (05) |
+| tests | rapport de vraisemblance de chaque effet (`drop1`) |
+| saisons | comparaisons deux à deux (`emmeans`, Tukey) |
+| résidus | `DHARMa` (une figure par modèle dans `diagnostics/`) |
+
+## Script 03 — variables environnementales par trait de chalut
+
+Une ligne par trait : profondeur, fune, jour de l'année, distance à l'embouchure
+(depuis `point_embouchure`, Saint-Nazaire par défaut) et, si le script 01 a été lancé,
+les variables Copernicus du **mois du trait** au **pixel le plus proche**.
+Exporte aussi les corrélations entre covariables et la part de chaque variable expliquée
+par la saison. À 1/12° ou 1/4°, les variables Copernicus varient surtout entre campagnes,
+très peu entre stations.
+
+Exporte aussi `environnement_campagnes.csv` (moyenne, min, max de chaque variable par
+campagne) : c'est ainsi que les variables Copernicus servent dans le rapport.
+
+## Script 04 — communautés de poissons
+
+Par trait analysable : richesse S, Shannon H', Piélou J' (sur les CPUE élevées), densité totale
+et densité de juvéniles (taille < taille de 1re maturité, FishBase). Chaque indice :
+`indice ~ saison + profondeur + (1 | station)`. Description : composition par saison,
+densité de juvéniles par espèce.
+
+Sorties : `data/processed/communautes/` (`tests`, `moyennes`, `contrastes`, `diagnostics`,
+`indices_par_trait`, `composition`, `juveniles_par_espece`) ; figures dans `outputs/figures/communautes/`.
+
+## Script 05 — condition et tailles par espèce
+
+Pour chaque espèce avec au moins `n_min_individus_espece` (50) individus mesurés et pesés :
+
+- condition : `log10(poids) ~ log10(taille) + saison + profondeur + (1 | trait)` (poids à taille égale)
+- taille : `log10(taille) ~ saison + profondeur + (1 | trait)`
+
+Une saison n'entre dans les tests d'une espèce que si l'espèce y a été prise dans au moins
+`n_min_traits_saison` (3) traits. Profondeur par tranche de 10 m : effets en % pour +10 m.
+Plus : relation taille-poids, Kn de Le Cren, croissance apparente été → automne des juvéniles.
+Les variables Copernicus ne sont pas des covariables (confondues avec la saison, voir `00_config.R`).
+
+Sorties : `data/processed/condition_especes/` (`tests`, `saisons`, `contrastes`, `profondeur`,
+`effectifs`, `relation_taille_poids`, `croissance`, `diagnostics`) ;
+figures dans `outputs/figures/condition_especes/`.
+
+## Script 06 — diversité fonctionnelle (annexe, hors CR)
 
 À lancer après le script 02. Lit `data/processed/preparation.rds` et `data/ref/traits_fonctionnels.csv`.
 Traits, taxons gardés (poissons par défaut), pondération et nombre de permutations : `R/00_config.R`.
@@ -109,9 +162,9 @@ Traits, taxons gardés (poissons par défaut), pondération et nombre de permuta
 Sorties : `data/processed/fonctionnel_indices.csv`, `fonctionnel_espace.csv`,
 `fonctionnel_qualite_espace.csv` ; figures dans `outputs/figures/fonctionnel/`.
 
-## Script 05b — modélisation des indices fonctionnels
+## Script 06b — modélisation des indices fonctionnels (annexe)
 
-À lancer après le script 05. Pour chaque indice (liste et loi en tête du script) :
+À lancer après le script 06. Pour chaque indice (liste et loi en tête du script) :
 
 | étape | méthode |
 |---|---|
@@ -127,55 +180,3 @@ Sorties : `data/processed/modeles_fonctionnels/` (`resume.csv` d'abord, puis `te
 `coefficients`, `moyennes`, `contrastes`, `diagnostics`, `sensibilite`, `predictions`) ;
 figures dans `outputs/figures/modeles_fonctionnels/` (+ un graphique DHARMa par indice dans `diagnostics/`).
 
-## Script 07 — arrivée des juvéniles (contexte)
-
-À lancer après le script 02. Un individu est juvénile si sa taille est inférieure à la taille
-de première maturité (`taille_maturite_cm` dans `data/ref/traits_fonctionnels.csv`, FishBase).
-
-Par trait de chalut : densité de juvéniles (ind/km), nombre de taxons présents en juvéniles,
-part de juvéniles. Modèles `indicateur ~ saison + profondeur + (1 | station)` (même démarche
-que 05b), sensibilité sans les traits douteux, et test à profondeur égale (Kruskal-Wallis sur
-les traits de moins de `profondeur_max_cotiers` m), car au printemps seuls des traits côtiers
-sont analysables. Tableau descriptif de la densité de juvéniles par espèce et par saison.
-
-Retirés (pas assez fiables avec nos effectifs) : pente du spectre de taille (NBSS), condition
-et taille moyennes toutes espèces. Condition et taille sont analysées par espèce dans le 08.
-
-Sorties : `data/processed/nourricerie/`, figures dans `outputs/figures/nourricerie/`.
-
-## Script 06 — variables environnementales par trait de chalut
-
-Une ligne par trait : profondeur, fune, jour de l'année, distance à l'embouchure
-(depuis `point_embouchure`, Saint-Nazaire par défaut) et, si le script 01 a été lancé,
-les variables Copernicus du **mois du trait** au **pixel le plus proche**.
-Exporte aussi les corrélations entre covariables et la part de chaque variable expliquée
-par la saison. À 1/12° ou 1/4°, les variables Copernicus varient surtout entre campagnes,
-très peu entre stations.
-
-Exporte aussi `environnement_campagnes.csv` (moyenne, min, max de chaque variable par
-campagne) : c'est ainsi que les variables Copernicus servent dans le rapport.
-
-Ordre : `01` (Copernicus) → `02` → `06` → `07` → `08`.
-
-## Script 08 — condition et tailles par espèce, avec vérification de robustesse
-
-Pour chaque espèce avec au moins `n_min_individus_espece` individus mesurés et pesés :
-
-- condition : `log10(poids) ~ log10(taille) + saison + profondeur + (1 | trait)` (poids à taille égale)
-- taille : `log10(taille) ~ saison + profondeur + (1 | trait)`
-
-Une saison n'entre dans les tests d'une espèce que si l'espèce y a été prise dans au moins
-`n_min_traits_saison` traits (3). Profondeur par tranche de 10 m : effets en % pour +10 m.
-LRT, correction de Holm sur tous les tests, Tukey entre saisons, DHARMa.
-
-Chaque effet est ensuite vérifié de trois façons : test sur les moyennes par trait (traits
-d'au moins `n_min_individus_trait` individus), retrait d'un trait à tour de rôle, et sans les
-traits douteux. Verdict dans `tests.csv` : « robuste », « fragile » ou « non significatif ».
-Croissance apparente été → automne des juvéniles (IC 95 % par bootstrap des traits).
-
-Les variables Copernicus ne sont pas des covariables : à cette échelle, elles sont confondues
-avec la saison (voir `00_config.R`).
-
-Sorties : `data/processed/condition_especes/` (`tests`, `saisons`, `contrastes`, `profondeur`,
-`effectifs`, `relation_taille_poids`, `croissance`, `diagnostics`, `moyennes_par_trait`) ;
-figures dans `outputs/figures/condition_especes/`. Durée : environ 6 minutes.

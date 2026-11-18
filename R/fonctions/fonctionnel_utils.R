@@ -1,6 +1,6 @@
 # =============================================================================
 # fonctionnel_utils.R — Indices de diversité fonctionnelle
-# Utilisé par 05_diversite_fonctionnelle.R
+# Utilisé par 06_diversite_fonctionnelle.R
 #
 # Notations : P = matrice communautés × taxons d'abondances RELATIVES
 #             (lignes sommant à 1), D = distance fonctionnelle (Gower, 0-1)

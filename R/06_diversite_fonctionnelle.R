@@ -1,5 +1,5 @@
 # =============================================================================
-# 05_diversite_fonctionnelle.R
+# 06_diversite_fonctionnelle.R
 # Structure et diversité fonctionnelles des communautés
 #
 # Entrées : data/processed/preparation.rds (script 02)
@@ -11,7 +11,7 @@
 #   2. Distance de Gower + PCoA, qualité de l'espace fonctionnel
 #   3. Indices par trait de chalut : FDis, Rao, FRic, FEve, FDiv, CWM
 #   4. Modèle nul : SES de FDis et Rao (indépendants de la richesse)
-#   5. Figures (la modélisation est dans 05b_modeles_fonctionnels.R)
+#   5. Figures (la modélisation est dans 06b_modeles_fonctionnels.R)
 #
 # Sorties : data/processed/fonctionnel_*.csv, outputs/figures/fonctionnel/
 # =============================================================================
@@ -160,7 +160,7 @@ indices <- indices |>
   mutate(saison = factor(saison, levels = c("printemps", "ete", "automne")))
 
 # =============================================================================
-# 5. Modélisation : voir 05b_modeles_fonctionnels.R
+# 5. Modélisation : voir 06b_modeles_fonctionnels.R
 # =============================================================================
 
 # =============================================================================
@@ -298,4 +298,4 @@ print(indices |>
                   SES_RaoQ = mean(SES_RaoQ, na.rm = TRUE)) |>
         mutate(across(where(is.numeric), ~ round(.x, 2))) |>
         as.data.frame())
-message("\nModélisation (saison, profondeur, station) : lancer R/05b_modeles_fonctionnels.R")
+message("\nModélisation (saison, profondeur, station) : lancer R/06b_modeles_fonctionnels.R")

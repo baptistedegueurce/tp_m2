@@ -151,7 +151,7 @@ exclure_traits_douteux <- FALSE  # TRUE = retirés des tables d'analyse
 seuil_aberrant_taille_poids <- 4
 
 # =============================================================================
-# Diversité fonctionnelle (script 05)
+# Diversité fonctionnelle (scripts 06 et 06b, en annexe du CR)
 # =============================================================================
 fichier_traits_fonctionnels <- here::here("data", "ref", "traits_fonctionnels.csv")
 
@@ -175,7 +175,7 @@ n_permutations_ses <- 999
 graine_aleatoire   <- 42
 
 # =============================================================================
-# Variables environnementales par trait de chalut (script 06)
+# Variables environnementales par trait de chalut (script 03)
 # =============================================================================
 # Point de référence pour la distance à l'embouchure : entrée de l'estuaire
 # de la Loire à Saint-Nazaire (à ajuster si vous préférez un autre point).
@@ -187,8 +187,12 @@ variables_copernicus_traits <- c("temperature_fond", "temperature", "salinite",
                                  "chlorophylle", "oxygene")
 
 # =============================================================================
-# Juvéniles (script 07) et condition / tailles par espèce (script 08)
+# Communautés (script 04) et condition / tailles par espèce (script 05)
 # =============================================================================
+# Indices de communauté calculés sur les poissons seulement (crustacés et
+# céphalopodes : comptages moins homogènes d'un trait à l'autre)
+groupes_communaute <- c("poisson")
+
 n_min_individus_espece <- 50      # espèces analysées : au moins n individus
 
 # Une saison n'entre dans les tests d'une espèce que si l'espèce y a été
@@ -196,23 +200,10 @@ n_min_individus_espece <- 50      # espèces analysées : au moins n individus
 # saison » ne se distingue pas d'un effet du trait (pas de réplication).
 n_min_traits_saison <- 3
 
-# Vérification au niveau du trait : moyenne par trait calculée seulement
-# si le trait compte au moins n individus de l'espèce
-n_min_individus_trait <- 3
-
-# Profondeur maximale des traits « côtiers » pour le test de sensibilité du
-# script 07 : au printemps, seuls des traits peu profonds sont analysables
-# (6 traits sur 7 à moins de 17 m). On compare alors les saisons à
-# profondeur égale.
-profondeur_max_cotiers <- 17
-
-# Rééchantillonnages (bootstrap des traits) pour l'IC de la croissance
-n_bootstrap <- 999
-
 # Covariable spatiale des modèles. La distance à l'embouchure est corrélée à
 # la profondeur (rho = 0,85) et la longueur de fune aussi (0,87) : une seule
 # variable spatiale est gardée. Les variables Copernicus (1/12° à 1/4°,
 # mensuelles) ne varient pratiquement qu'entre campagnes sur une zone de
 # 17 × 10 km : elles sont confondues avec la saison et servent seulement à
-# DÉCRIRE les conditions de chaque campagne (script 06), pas de covariables.
+# DÉCRIRE les conditions de chaque campagne (script 03), pas de covariables.
 covariable_spatiale <- "profondeur_m"

@@ -1,5 +1,5 @@
 # =============================================================================
-# 06_variables_environnementales.R
+# 03_variables_environnementales.R
 # Une ligne par trait de chalut avec ses variables environnementales
 #
 # Entrées : data/processed/preparation.rds          (script 02)
