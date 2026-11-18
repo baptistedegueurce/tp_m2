@@ -116,6 +116,19 @@ r2_saison <- sapply(names(x), function(v) {
   summary(lm(d[[v]] ~ d$saison))$r.squared
 })
 
+# Conditions de chaque campagne (moyenne, min, max sur les traits
+# analysables) : c'est ainsi que les variables Copernicus sont utilisées
+# dans le rapport (description), pas comme covariables des modèles
+campagnes <- env |>
+  filter(analysable) |>
+  tidyr::pivot_longer(all_of(names(x)), names_to = "variable", values_to = "valeur") |>
+  group_by(saison, variable) |>
+  summarise(n_traits = sum(!is.na(valeur)), moyenne = mean(valeur, na.rm = TRUE),
+            min = min(valeur, na.rm = TRUE), max = max(valeur, na.rm = TRUE),
+            .groups = "drop")
+write.csv(campagnes, file.path(dossiers$processed, "environnement_campagnes.csv"),
+          row.names = FALSE, fileEncoding = "UTF-8")
+
 message("\nCorrélations (Spearman) les plus fortes :")
 print(head(cor_long |> mutate(rho = round(rho, 2)), 10))
 message("\nPart de chaque variable expliquée par la saison (R²) :")

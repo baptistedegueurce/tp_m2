@@ -127,25 +127,21 @@ Sorties : `data/processed/modeles_fonctionnels/` (`resume.csv` d'abord, puis `te
 `coefficients`, `moyennes`, `contrastes`, `diagnostics`, `sensibilite`, `predictions`) ;
 figures dans `outputs/figures/modeles_fonctionnels/` (+ un graphique DHARMa par indice dans `diagnostics/`).
 
-## Script 07 — nourricerie : juvéniles, tailles, condition, croissance
+## Script 07 — arrivée des juvéniles (contexte)
 
-Question : comment la structure fonctionnelle et en taille des communautés de juvéniles
-évolue-t-elle au cours de la saison de nourricerie ? À lancer après le script 02.
+À lancer après le script 02. Un individu est juvénile si sa taille est inférieure à la taille
+de première maturité (`taille_maturite_cm` dans `data/ref/traits_fonctionnels.csv`, FishBase).
 
-Les traits sont ici **mesurés** sur les individus (taille, poids) plutôt que tirés de la
-littérature, car les poissons capturés sont surtout des juvéniles. Un individu est juvénile
-si sa taille est inférieure à la taille de première maturité (`taille_maturite_cm` dans
-`data/ref/traits_fonctionnels.csv`, FishBase, valeurs du golfe de Gascogne en priorité).
+Par trait de chalut : densité de juvéniles (ind/km), nombre de taxons présents en juvéniles,
+part de juvéniles. Modèles `indicateur ~ saison + profondeur + (1 | station)` (même démarche
+que 05b), sensibilité sans les traits douteux, et test à profondeur égale (Kruskal-Wallis sur
+les traits de moins de `profondeur_max_cotiers` m), car au printemps seuls des traits côtiers
+sont analysables. Tableau descriptif de la densité de juvéniles par espèce et par saison.
 
-| niveau | indicateurs | méthode |
-|---|---|---|
-| trait de chalut | part et densité de juvéniles, espèces en juvéniles, taille moyenne, taille relative (L / L maturité), pente du spectre de taille (NBSS), condition moyenne | modèles mixtes saison + profondeur + (1 \| station), même démarche que 05b |
-| espèce (≥ 50 individus) | distributions de tailles, tailles médianes, croissance apparente des juvéniles | quantiles pondérés par l'élévation |
-| espèce | condition à taille égale par saison | `log10(poids) ~ log10(taille) + saison + (1 \| trait)`, emmeans |
+Retirés (pas assez fiables avec nos effectifs) : pente du spectre de taille (NBSS), condition
+et taille moyennes toutes espèces. Condition et taille sont analysées par espèce dans le 08.
 
 Sorties : `data/processed/nourricerie/`, figures dans `outputs/figures/nourricerie/`.
-La « croissance apparente » suppose qu'on suit la même cohorte : une baisse de taille signale
-l'arrivée d'une nouvelle cohorte, pas une décroissance.
 
 ## Script 06 — variables environnementales par trait de chalut
 
@@ -156,22 +152,30 @@ Exporte aussi les corrélations entre covariables et la part de chaque variable 
 par la saison. À 1/12° ou 1/4°, les variables Copernicus varient surtout entre campagnes,
 très peu entre stations.
 
-Ordre : `01` (Copernicus, zone et mois du TP réglés) → `02` → `06` → `08`.
+Exporte aussi `environnement_campagnes.csv` (moyenne, min, max de chaque variable par
+campagne) : c'est ainsi que les variables Copernicus servent dans le rapport.
 
-## Script 08 — condition et tailles par espèce
+Ordre : `01` (Copernicus) → `02` → `06` → `07` → `08`.
 
-Pour chaque espèce avec au moins `n_min_individus_espece` individus, à l'échelle de l'individu :
+## Script 08 — condition et tailles par espèce, avec vérification de robustesse
 
-- condition : `log10(poids) ~ log10(taille) + covariables + (1 | trait)` (poids à taille égale)
-- taille : `log10(taille) ~ covariables + (1 | trait)`
+Pour chaque espèce avec au moins `n_min_individus_espece` individus mesurés et pesés :
 
-Modèles comparés par AICc, identiques pour toutes les espèces : nul, profondeur,
-saison + profondeur (référence), puis chaque variable Copernicus seule + profondeur
-(elles sont corrélées entre elles et à la saison, on ne les combine pas). Covariables
-centrées-réduites : effets en % pour +1 écart-type, comparables entre espèces.
-Profondeur et distance à l'embouchure étant corrélées (rho ≈ 0,85), seule la première
-de `covariables_spatiales` est gardée au-delà de `seuil_correlation`.
-Option `restreindre_juveniles` pour ne comparer que des juvéniles.
+- condition : `log10(poids) ~ log10(taille) + saison + profondeur + (1 | trait)` (poids à taille égale)
+- taille : `log10(taille) ~ saison + profondeur + (1 | trait)`
 
-Sorties : `data/processed/condition_especes/` (`resume.csv`, `selection`, `tests`, `effets`,
-`saisons`, `diagnostics`, `echelles_covariables`) ; figures dans `outputs/figures/condition_especes/`.
+Une saison n'entre dans les tests d'une espèce que si l'espèce y a été prise dans au moins
+`n_min_traits_saison` traits (3). Profondeur par tranche de 10 m : effets en % pour +10 m.
+LRT, correction de Holm sur tous les tests, Tukey entre saisons, DHARMa.
+
+Chaque effet est ensuite vérifié de trois façons : test sur les moyennes par trait (traits
+d'au moins `n_min_individus_trait` individus), retrait d'un trait à tour de rôle, et sans les
+traits douteux. Verdict dans `tests.csv` : « robuste », « fragile » ou « non significatif ».
+Croissance apparente été → automne des juvéniles (IC 95 % par bootstrap des traits).
+
+Les variables Copernicus ne sont pas des covariables : à cette échelle, elles sont confondues
+avec la saison (voir `00_config.R`).
+
+Sorties : `data/processed/condition_especes/` (`tests`, `saisons`, `contrastes`, `profondeur`,
+`effectifs`, `relation_taille_poids`, `croissance`, `diagnostics`, `moyennes_par_trait`) ;
+figures dans `outputs/figures/condition_especes/`. Durée : environ 6 minutes.

@@ -187,16 +187,32 @@ variables_copernicus_traits <- c("temperature_fond", "temperature", "salinite",
                                  "chlorophylle", "oxygene")
 
 # =============================================================================
-# Condition et tailles par espèce (script 08)
+# Juvéniles (script 07) et condition / tailles par espèce (script 08)
 # =============================================================================
 n_min_individus_espece <- 50      # espèces analysées : au moins n individus
 
-# Covariables spatiales toujours présentes dans les modèles
-covariables_spatiales <- c("profondeur_m", "distance_embouchure_km")
+# Une saison n'entre dans les tests d'une espèce que si l'espèce y a été
+# capturée dans au moins n traits de chalut : avec 1 ou 2 traits, un « effet
+# saison » ne se distingue pas d'un effet du trait (pas de réplication).
+n_min_traits_saison <- 3
 
-# Au-delà de ce |r| entre deux covariables, la seconde est retirée
-seuil_correlation <- 0.7
+# Vérification au niveau du trait : moyenne par trait calculée seulement
+# si le trait compte au moins n individus de l'espèce
+n_min_individus_trait <- 3
 
-# TRUE = seulement les juvéniles (taille < taille de 1re maturité) : évite de
-# comparer des cohortes différentes (ex. tacauds 1+ au printemps, 0+ en été)
-restreindre_juveniles <- FALSE
+# Profondeur maximale des traits « côtiers » pour le test de sensibilité du
+# script 07 : au printemps, seuls des traits peu profonds sont analysables
+# (6 traits sur 7 à moins de 17 m). On compare alors les saisons à
+# profondeur égale.
+profondeur_max_cotiers <- 17
+
+# Rééchantillonnages (bootstrap des traits) pour l'IC de la croissance
+n_bootstrap <- 999
+
+# Covariable spatiale des modèles. La distance à l'embouchure est corrélée à
+# la profondeur (rho = 0,85) et la longueur de fune aussi (0,87) : une seule
+# variable spatiale est gardée. Les variables Copernicus (1/12° à 1/4°,
+# mensuelles) ne varient pratiquement qu'entre campagnes sur une zone de
+# 17 × 10 km : elles sont confondues avec la saison et servent seulement à
+# DÉCRIRE les conditions de chaque campagne (script 06), pas de covariables.
+covariable_spatiale <- "profondeur_m"

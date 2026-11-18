@@ -1,40 +1,42 @@
 # =============================================================================
 # 08_condition_tailles_especes.R
-# Qu'est-ce qui fait varier la condition et la taille des individus, dans
-# l'espace et dans le temps ? Mêmes modèles simples pour chaque espèce.
+# Qu'est-ce qui fait varier la condition et la taille des poissons, dans
+# l'espace (profondeur) et dans le temps (saison) ? Mêmes modèles simples
+# pour chaque espèce, puis vérification de la robustesse de chaque effet.
 #
 # Entrées : data/processed/preparation.rds          (script 02)
 #           data/processed/environnement_traits.csv (script 06)
+#           data/ref/traits_fonctionnels.csv        (taille de 1re maturité)
 #
-# Deux réponses, à l'échelle de l'INDIVIDU :
-#   - condition : log10(poids) ~ log10(taille) + covariables
-#       = différence de poids À TAILLE ÉGALE (approche « ANCOVA », préférée
-#         à la modélisation directe d'un ratio comme Kn ou K de Fulton)
-#   - taille    : log10(taille) ~ covariables
-# Effet aléatoire (1 | trait_id) : les poissons d'un même trait de chalut
-# partagent le même environnement et ne sont pas indépendants.
+# Espèces : au moins `n_min_individus_espece` individus mesurés et pesés.
+# Saisons : pour chaque espèce, seules les saisons où elle a été prise dans
+#   au moins `n_min_traits_saison` traits entrent dans les tests (sinon
+#   l'effet « saison » se confond avec l'effet d'un ou deux traits).
 #
-# Modèles candidats (mêmes pour toutes les espèces, comparés par AICc) :
-#   nul        : rien (en plus de la taille pour la condition)
-#   spatial    : profondeur (gradient côte-large)
-#   saison     : saison + profondeur                   <- modèle de référence
-#   env_<var>  : <variable Copernicus> + profondeur    (une seule à la fois :
-#                elles sont toutes corrélées entre elles et à la saison)
-# Un modèle env_ aussi bon que « saison » (ΔAICc < 2) indique que la
-# variable peut expliquer l'effet saison ; il ne prouve pas la causalité.
+# 1. Description : relation taille-poids (a, b), effectifs par saison,
+#    condition relative de Le Cren (Kn), distributions de tailles
+# 2. Modèles de référence (modèles linéaires mixtes, à l'échelle de l'individu)
+#      condition : log10(W) ~ log10(L) + saison + profondeur + (1 | trait)
+#                  = différence de poids À TAILLE ÉGALE (ANCOVA ; préférée à
+#                    l'analyse directe d'un ratio comme Kn, Packard & Boardman 1988)
+#      taille    : log10(L) ~ saison + profondeur + (1 | trait)
+#    Profondeur centrée et exprimée par tranche de 10 m : effets en % de
+#    variation pour +10 m, comparables entre espèces.
+#    Tests du rapport de vraisemblance (LRT), correction de Holm sur
+#    l'ensemble espèces × réponses × effets, comparaisons de Tukey.
+# 3. Vérifications de robustesse de chaque effet :
+#    a. au niveau du trait de chalut (unité réellement indépendante) :
+#       moyenne par trait des résidus de condition / du log de la taille,
+#       puis lm(moyenne ~ saison + profondeur), test F ;
+#    b. retrait d'un trait à tour de rôle (p maximal obtenu) ;
+#    c. sans les traits douteux.
+#    Verdict : « robuste » si l'effet reste significatif dans toutes les
+#    versions ; « fragile » s'il est significatif dans le modèle de référence
+#    mais pas dans au moins une vérification ; « non significatif » sinon.
+# 4. Croissance apparente des juvéniles entre l'été et l'automne (décalage
+#    de la taille médiane, IC 95 % par bootstrap des traits)
 #
-# Covariables continues centrées-réduites sur l'ensemble des traits : les
-# effets sont exprimés en % de variation pour +1 écart-type, comparables
-# entre espèces et entre variables.
-#
-# Option : restreindre_juveniles (00_config.R) pour ne comparer que des
-# juvéniles entre saisons.
-#
-# Diagnostics : avec plusieurs centaines d'individus, DHARMa détecte de
-# petits écarts ; les tailles mélangent des cohortes (distribution
-# multimodale), donc la loi normale n'est qu'approchée pour la réponse
-# « taille ». Les effets estimés restent interprétables ; les p-values sont
-# approximatives.
+# Variables Copernicus : non utilisées comme covariables (voir 00_config.R).
 #
 # Sorties : data/processed/condition_especes/
 #           outputs/figures/condition_especes/ (+ diagnostics/)
@@ -55,6 +57,8 @@ set.seed(graine_aleatoire)
 dossier_out  <- file.path(dossiers$processed, "condition_especes")
 dossier_fig  <- here::here("outputs", "figures", "condition_especes")
 dossier_diag <- file.path(dossier_fig, "diagnostics")
+unlink(list.files(dossier_out, full.names = TRUE))   # anciennes sorties
+unlink(list.files(dossier_fig, pattern = "\\.png$", full.names = TRUE))
 for (d in c(dossier_out, dossier_fig, dossier_diag)) {
   dir.create(d, recursive = TRUE, showWarnings = FALSE)
 }
@@ -65,274 +69,383 @@ prep <- readRDS(file.path(dossiers$processed, "preparation.rds"))
 fichier_env <- file.path(dossiers$processed, "environnement_traits.csv")
 if (!file.exists(fichier_env)) stop("Lancer d'abord R/06_variables_environnementales.R")
 env <- read.csv(fichier_env, encoding = "UTF-8")
-noms <- with(read.csv(fichier_traits_fonctionnels, encoding = "UTF-8"),
-             setNames(nom_commun, taxon))
+traits_ref <- read.csv(fichier_traits_fonctionnels, encoding = "UTF-8")
+noms <- setNames(traits_ref$nom_commun, traits_ref$taxon)
+lab_esp <- function(tx) ifelse(is.na(noms[tx]), tx, paste0(noms[tx], "\n(", tx, ")"))
 
 # =============================================================================
-# 1. Covariables : choix et standardisation
+# 1. Individus
 # =============================================================================
-env_a <- env |> filter(analysable)
+prof_moy <- mean(env[[covariable_spatiale]][env$analysable])
 
-# Covariables spatiales : on retire la seconde si trop corrélée à la première
-spatiales <- intersect(covariables_spatiales, names(env))
-if (length(spatiales) > 1) {
-  r <- cor(env_a[[spatiales[1]]], env_a[[spatiales[2]]], method = "spearman",
-           use = "complete.obs")
-  if (abs(r) > seuil_correlation) {
-    message(sprintf("%s et %s sont corrélées (rho = %.2f) : %s seule est gardée.",
-                    spatiales[1], spatiales[2], r, spatiales[1]))
-    spatiales <- spatiales[1]
-  }
-}
-
-# Variables Copernicus disponibles pour tous les traits analysables
-cop <- intersect(variables_copernicus_traits, names(env))
-cop <- cop[vapply(cop, function(v) all(!is.na(env_a[[v]])) &&
-                    sd(env_a[[v]]) > 0, logical(1))]
-if (!length(cop)) {
-  message("Aucune variable Copernicus : seuls les modèles saison / profondeur ",
-          "sont ajustés (lancer 01 puis 06 pour les ajouter).")
-}
-
-# Centrage-réduction sur les traits analysables (même échelle pour toutes
-# les espèces). Les moyennes / écarts-types sont exportés pour revenir aux
-# unités d'origine.
-a_reduire <- c(spatiales, cop)
-echelles <- data.frame(variable = a_reduire,
-                       moyenne = sapply(a_reduire, function(v) mean(env_a[[v]])),
-                       ecart_type = sapply(a_reduire, function(v) sd(env_a[[v]])))
-for (v in a_reduire) {
-  env[[paste0(v, "_z")]] <- (env[[v]] - echelles$moyenne[echelles$variable == v]) /
-    echelles$ecart_type[echelles$variable == v]
-}
-
-# =============================================================================
-# 2. Individus
-# =============================================================================
 ind <- prep$individus |>
   filter(groupe == "poisson", !aberrant_taille_poids,
          taille_mm > 0, poids_g > 0) |>
   inner_join(env |> filter(analysable) |>
-               select(trait_id, station, lat, lon, ends_with("_z"),
-                      all_of(a_reduire)),
+               select(trait_id, station, lat, lon, douteux,
+                      prof = all_of(covariable_spatiale)),
              by = c("trait_id", "station")) |>
+  left_join(traits_ref |> select(taxon, taille_maturite_cm), by = "taxon") |>
   mutate(saison = factor(saison, levels = saisons),
          trait_id = factor(trait_id),
+         prof10 = (prof - prof_moy) / 10,        # +1 = 10 m plus profond
          log_poids = log10(poids_g),
-         log_taille = log10(taille_mm))
-
-if (restreindre_juveniles) {
-  lm_mat <- read.csv(fichier_traits_fonctionnels, encoding = "UTF-8") |>
-    select(taxon, taille_maturite_cm)
-  avant <- nrow(ind)
-  ind <- ind |> left_join(lm_mat, by = "taxon") |>
-    filter(!is.na(taille_maturite_cm), taille_mm < 10 * taille_maturite_cm)
-  message(sprintf("Juvéniles seulement : %d individus sur %d", nrow(ind), avant))
-}
+         log_taille = log10(taille_mm),
+         juvenile = taille_mm < 10 * taille_maturite_cm)
 
 especes <- ind |> count(taxon) |> filter(n >= n_min_individus_espece) |> pull(taxon)
 message("Espèces analysées (>= ", n_min_individus_espece, " individus) : ",
         paste(especes, collapse = ", "))
+ind <- ind |> filter(taxon %in% especes)
+ind <- condition_le_cren(ind, n_min = 20)$individus   # Kn (descriptif)
 
-# Kn (descriptif, pour les figures)
-ind <- condition_le_cren(ind |> mutate(aberrant_taille_poids = FALSE),
-                         n_min = 20)$individus
+# Effectifs : individus et traits par espèce et saison
+effectifs <- ind |>
+  group_by(taxon, saison) |>
+  summarise(n_individus = n(), n_traits = n_distinct(trait_id),
+            part_juveniles = mean(juvenile), L_min = min(taille_mm),
+            L_max = max(taille_mm), .groups = "drop") |>
+  mutate(saison_testee = n_traits >= n_min_traits_saison)
+
+# Relation taille-poids (toutes saisons) : W = a L^b
+rel_tp <- bind_rows(lapply(especes, function(tx) {
+  d <- ind[ind$taxon == tx, ]
+  fit <- lm(log_poids ~ log_taille, d)
+  ic <- confint(fit)[2, ]
+  data.frame(taxon = tx, nom_commun = noms[[tx]], n = nrow(d),
+             L_min_mm = min(d$taille_mm), L_max_mm = max(d$taille_mm),
+             a = 10^coef(fit)[[1]], b = coef(fit)[[2]],
+             b_IC95_bas = ic[[1]], b_IC95_haut = ic[[2]],
+             r2 = summary(fit)$r.squared)
+}))
 
 # =============================================================================
-# 3. Modèles par espèce
+# 2. Modèles de référence + 3. vérifications
 # =============================================================================
-terme_spatial <- paste(paste0(spatiales, "_z"), collapse = " + ")
+pct <- function(b) 100 * (10^b - 1)   # coefficient sur log10 -> % de variation
 
-formules <- function(reponse) {
-  base <- if (reponse == "condition") "log_poids ~ log_taille_c" else "log_taille ~ 1"
-  f <- c(nul     = base,
-         spatial = paste(base, "+", terme_spatial),
-         saison  = paste(base, "+ saison +", terme_spatial))
-  for (v in cop) f[paste0("env_", v)] <- paste(base, "+", paste0(v, "_z"), "+", terme_spatial)
-  lapply(f, function(x) as.formula(paste(x, "+ (1 | trait_id)")))
+formule <- function(reponse, avec_saison) {
+  f <- if (reponse == "condition") "log_poids ~ log_taille_c" else "log_taille ~ 1"
+  if (avec_saison) f <- paste(f, "+ saison")
+  as.formula(paste(f, "+ prof10 + (1 | trait_id)"))
+}
+p_effet <- function(m, effet) {
+  if (is.null(m)) return(NA_real_)
+  t <- tryCatch(tests_lrt(m), error = function(e) NULL)
+  if (is.null(t) || !effet %in% t$effet) return(NA_real_)
+  t$p[t$effet == effet]
 }
 
-# Effet multiplicatif : coefficient b sur log10 -> % de variation
-pct <- function(b) 100 * (10^b - 1)
+res <- list(tests = list(), saisons = list(), contrastes = list(),
+            profondeur = list(), diagnostics = list())
 
-res <- list(selection = list(), tests = list(), effets = list(),
-            saisons = list(), diagnostics = list())
-
-for (tx in especes) for (reponse in c("condition", "taille")) {
-  cle <- paste(tx, reponse, sep = " | ")
-  message("--- ", cle)
-  d <- ind |> filter(taxon == tx) |>
-    mutate(saison = droplevels(saison),
+for (tx in especes) {
+  sais_ok <- effectifs$saison[effectifs$taxon == tx & effectifs$saison_testee]
+  d <- ind |>
+    filter(taxon == tx, saison %in% sais_ok) |>
+    mutate(saison = droplevels(saison), trait_id = droplevels(trait_id),
            log_taille_c = log_taille - mean(log_taille))
-  f <- formules(reponse)
-  if (nlevels(d$saison) < 2) f$saison <- NULL
+  avec_saison <- nlevels(d$saison) >= 2
+  effets <- c(if (avec_saison) "saison", "prof10")
 
-  mods <- lapply(f, ajuster_glmm, data = d, famille = gaussian())
-  sel <- selection_aicc(mods)
-  res$selection[[cle]] <- cbind(taxon = tx, reponse = reponse, n = nrow(d), sel)
+  # Résidus de condition (relation taille-poids commune aux saisons testées)
+  d$residu_condition <- resid(lm(log_poids ~ log_taille, d))
 
-  # Modèle de référence : saison + spatial
-  m <- mods$saison
-  if (is.null(m)) next
-  t <- tests_lrt(m)
-  res$tests[[cle]] <- cbind(taxon = tx, reponse = reponse, n = nobs(m),
-                            n_traits = nlevels(droplevels(d$trait_id)), t)
+  for (reponse in c("condition", "taille")) {
+    cle <- paste(tx, reponse, sep = " | ")
+    message("--- ", cle, " (saisons : ", paste(levels(d$saison), collapse = ", "), ")")
+    f <- formule(reponse, avec_saison)
+    m <- ajuster_glmm(f, d, gaussian())
+    if (is.null(m)) { warning("Échec du modèle : ", cle); next }
+    lrt <- tests_lrt(m)
 
-  # Effets continus (% pour +1 écart-type), modèle saison + chaque modèle env
-  for (nm in grep("^saison$|^env_", names(mods), value = TRUE)) {
-    mm <- mods[[nm]]
-    if (is.null(mm)) next
-    co <- coefficients_modele(mm)
-    co <- co[grepl("_z$", co$terme), ]
-    if (nm != "saison") co <- co[co$terme == paste0(sub("^env_", "", nm), "_z"), ]
-    if (!nrow(co)) next
-    res$effets[[paste(cle, nm)]] <- data.frame(
-      taxon = tx, reponse = reponse, modele = nm,
-      variable = sub("_z$", "", co$terme),
-      effet_pct_par_ET = pct(co$estimation),
+    # 3a. Niveau du trait : une valeur moyenne par trait
+    y_ind <- if (reponse == "condition") "residu_condition" else "log_taille"
+    pt <- d |>
+      group_by(trait_id, saison) |>
+      summarise(y = mean(.data[[y_ind]]), n = n(), prof10 = first(prof10),
+                .groups = "drop") |>
+      filter(n >= n_min_individus_trait) |>
+      mutate(saison = droplevels(saison))
+    f_trait <- as.formula(paste("y ~", paste(c(if (avec_saison && nlevels(pt$saison) > 1)
+      "saison", "prof10"), collapse = " + ")))
+    p_trait <- tryCatch({
+      dt <- drop1(lm(f_trait, pt), test = "F")
+      setNames(dt$`Pr(>F)`[-1], rownames(dt)[-1])
+    }, error = function(e) c(saison = NA, prof10 = NA))
+
+    # 3b. Retrait d'un trait à tour de rôle
+    loo <- sapply(levels(d$trait_id), function(tr) {
+      dd <- d[d$trait_id != tr, ] |> mutate(saison = droplevels(saison))
+      if (avec_saison && nlevels(dd$saison) < 2) return(c(saison = NA, prof10 = NA))
+      mm <- ajuster_glmm(f, dd, gaussian())
+      sapply(effets, function(e) p_effet(mm, e))
+    })
+    loo <- matrix(loo, nrow = length(effets), dimnames = list(effets, NULL))
+
+    # 3c. Sans les traits douteux
+    dd <- d[!d$douteux, ] |> mutate(saison = droplevels(saison))
+    m_sd <- if (avec_saison && nlevels(dd$saison) < 2) NULL else
+      ajuster_glmm(f, dd, gaussian())
+
+    for (e in effets) {
+      res$tests[[paste(cle, e)]] <- data.frame(
+        taxon = tx, reponse = reponse,
+        effet = ifelse(e == "prof10", "profondeur", e),
+        saisons_testees = paste(levels(d$saison), collapse = "/"),
+        n_individus = nobs(m), n_traits = nlevels(d$trait_id),
+        chi2 = lrt$chi2[lrt$effet == e], ddl = lrt$ddl[lrt$effet == e],
+        p = lrt$p[lrt$effet == e],
+        n_traits_moyennes = nrow(pt),
+        p_niveau_trait = unname(p_trait[e]),
+        p_max_retrait_un_trait = max(loo[e, ], na.rm = TRUE),
+        trait_le_plus_influent = levels(d$trait_id)[which.max(loo[e, ])],
+        p_sans_douteux = p_effet(m_sd, e))
+    }
+
+    # Effet de la profondeur : % pour +10 m
+    co <- coefficients_modele(m)
+    co <- co[co$terme == "prof10", ]
+    res$profondeur[[cle]] <- data.frame(
+      taxon = tx, reponse = reponse,
+      effet_pct_10m = pct(co$estimation),
       IC95_bas = pct(co$estimation - 1.96 * co$erreur_type),
       IC95_haut = pct(co$estimation + 1.96 * co$erreur_type),
-      p = co$p,
-      delta_AICc_modele = sel$delta_AICc[sel$modele == nm])
+      gamme_profondeur_m = paste(round(range(d$prof)), collapse = "-"))
+
+    # Saisons : écart à la moyenne de l'espèce (%), contrastes de Tukey (%)
+    if (avec_saison) {
+      em <- emmeans::emmeans(m, ~ saison)
+      emd <- as.data.frame(em)
+      ref <- mean(emd$emmean)
+      res$saisons[[cle]] <- data.frame(
+        taxon = tx, reponse = reponse, saison = emd$saison,
+        ecart_pct = pct(emd$emmean - ref),
+        IC95_bas = pct(emd[[grep("lower|LCL", names(emd))[1]]] - ref),
+        IC95_haut = pct(emd[[grep("upper|UCL", names(emd))[1]]] - ref),
+        valeur_mm = if (reponse == "taille") 10^emd$emmean else NA,
+        n_individus = as.vector(table(d$saison)[as.character(emd$saison)]),
+        n_traits = as.vector(tapply(d$trait_id, d$saison,
+                                    function(x) length(unique(x)))[as.character(emd$saison)]))
+      ctr <- as.data.frame(pairs(em, adjust = "tukey"))
+      res$contrastes[[cle]] <- data.frame(
+        taxon = tx, reponse = reponse, contraste = ctr$contrast,
+        difference_pct = pct(ctr$estimate), p_tukey = ctr$p.value)
+    }
+
+    # Diagnostics DHARMa (autocorrélation spatiale testée par trait)
+    dg <- diagnostics_dharma(
+      m, d, file.path(dossier_diag, paste0(make.names(tx), "_", reponse, ".png")),
+      groupe = "trait_id")
+    res$diagnostics[[cle]] <- data.frame(
+      taxon = tx, reponse = reponse, dg,
+      variance_trait = unname(unlist(glmmTMB::VarCorr(m)$cond$trait_id)),
+      variance_residuelle = sigma(m)^2,
+      avertissements = paste(attr(m, "avertissements"), collapse = " | "))
   }
-
-  # Saisons : moyennes marginales -> % d'écart à la moyenne de l'espèce
-  em <- as.data.frame(emmeans::emmeans(m, ~ saison))
-  ref <- mean(em$emmean)
-  res$saisons[[cle]] <- data.frame(
-    taxon = tx, reponse = reponse, saison = em$saison,
-    ecart_pct = pct(em$emmean - ref),
-    IC95_bas = pct(em[[grep("lower|LCL", names(em))[1]]] - ref),
-    IC95_haut = pct(em[[grep("upper|UCL", names(em))[1]]] - ref),
-    n = as.vector(table(d$saison)[as.character(em$saison)]))
-
-  diag <- diagnostics_dharma(
-    m, d, file.path(dossier_diag, paste0(make.names(tx), "_", reponse, ".png")),
-    groupe = "trait_id")
-  res$diagnostics[[cle]] <- data.frame(
-    taxon = tx, reponse = reponse, diag,
-    variance_trait = unname(unlist(glmmTMB::VarCorr(m)$cond$trait_id)),
-    avertissements = paste(attr(m, "avertissements"), collapse = " | "))
 }
 
 lier <- function(x) { x <- do.call(rbind, x); rownames(x) <- NULL; x }
 tabs <- lapply(res, lier)
-# Holm sur les tests d'intérêt seulement (saison, covariables) : l'effet de
-# la taille sur le poids, évident, n'entre pas dans la correction
-interet <- tabs$tests$effet != "log_taille_c"
-tabs$tests$p_holm <- NA_real_
-tabs$tests$p_holm[interet] <- p.adjust(tabs$tests$p[interet], method = "holm")
-if (!is.null(tabs$effets)) tabs$effets$p_holm <- p.adjust(tabs$effets$p, method = "holm")
 
-# Résumé : une ligne par espèce × réponse
-tabs$resume <- tabs$selection |>
-  group_by(taxon, reponse, n) |>
-  summarise(meilleur_modele = modele[which.min(AICc)],
-            delta_AICc_saison = delta_AICc[modele == "saison"][1],
-            .groups = "drop") |>
-  left_join(tabs$tests |> filter(effet != "log_taille_c") |>
-              select(taxon, reponse, effet, p_holm) |>
-              tidyr::pivot_wider(names_from = effet, values_from = p_holm,
-                                 names_prefix = "p_holm_"),
-            by = c("taxon", "reponse"))
+# Correction de Holm sur tous les tests saison / profondeur, puis verdict
+tabs$tests <- tabs$tests |>
+  mutate(p_holm = p.adjust(p, method = "holm"),
+         verdict = case_when(
+           p_holm >= 0.05 ~ "non significatif",
+           p_niveau_trait < 0.05 & p_max_retrait_un_trait < 0.05 &
+             p_sans_douteux < 0.05 ~ "robuste",
+           TRUE ~ "fragile"),
+         raison_fragile = case_when(
+           verdict != "fragile" ~ "",
+           TRUE ~ paste0(
+             ifelse(is.na(p_niveau_trait) | p_niveau_trait >= 0.05,
+                    "non significatif au niveau du trait ; ", ""),
+             ifelse(p_max_retrait_un_trait >= 0.05,
+                    paste0("dépend du trait ", trait_le_plus_influent, " ; "), ""),
+             ifelse(is.na(p_sans_douteux) | p_sans_douteux >= 0.05,
+                    "disparaît sans les traits douteux", "")))) |>
+  relocate(p_holm, .after = p)
 
+# =============================================================================
+# 4. Croissance apparente des juvéniles (été -> automne)
+# =============================================================================
+# Décalage de la taille médiane des juvéniles (pondérée par l'élévation)
+# divisé par le nombre de jours. Hypothèse : même cohorte, sans arrivée ni
+# départ sélectif en taille entre les deux campagnes -> « croissance
+# apparente ». IC 95 % : bootstrap des traits dans chaque saison.
+mediane_juv <- function(dd) quantile_pond(dd$taille_mm, dd$facteur_elevation, 0.5)
+croissance <- bind_rows(lapply(especes, function(tx) {
+  ok <- effectifs |> filter(taxon == tx, saison %in% c("ete", "automne"),
+                             saison_testee)
+  if (nrow(ok) < 2) return(NULL)
+  dj <- ind |> filter(taxon == tx, juvenile, saison %in% c("ete", "automne"))
+  e <- dj[dj$saison == "ete", ]; a <- dj[dj$saison == "automne", ]
+  jours <- as.numeric(mean(as.Date(a$date)) - mean(as.Date(e$date)))
+  gain <- mediane_juv(a) - mediane_juv(e)
+  boot <- replicate(n_bootstrap, {
+    tirer <- function(x) {
+      tr <- sample(unique(as.character(x$trait_id)), replace = TRUE)
+      do.call(rbind, lapply(tr, function(t) x[x$trait_id == t, ]))
+    }
+    mediane_juv(tirer(a)) - mediane_juv(tirer(e))
+  })
+  data.frame(taxon = tx, nom_commun = noms[[tx]],
+             n_juv_ete = nrow(e), n_juv_automne = nrow(a),
+             L_med_ete_mm = mediane_juv(e), L_med_automne_mm = mediane_juv(a),
+             jours = jours, gain_mm = gain,
+             croissance_mm_jour = gain / jours,
+             IC95_bas = quantile(boot, 0.025) / jours,
+             IC95_haut = quantile(boot, 0.975) / jours)
+}))
+
+# =============================================================================
+# Export
+# =============================================================================
+tabs$effectifs <- effectifs
+tabs$relation_taille_poids <- rel_tp
+tabs$croissance <- croissance
 for (nom in names(tabs)) {
   write.csv(tabs[[nom]], file.path(dossier_out, paste0(nom, ".csv")),
             row.names = FALSE, fileEncoding = "UTF-8")
 }
-write.csv(echelles, file.path(dossier_out, "echelles_covariables.csv"),
-          row.names = FALSE, fileEncoding = "UTF-8")
 
 # =============================================================================
-# 4. Figures
+# 5. Figures
 # =============================================================================
-lab_esp <- function(tx) ifelse(is.na(noms[tx]), tx, paste0(noms[tx], "\n(", tx, ")"))
-lab_rep <- c(condition = "Condition (poids à taille égale)",
-             taille = "Taille")
+lab_rep <- c(condition = "Condition (poids à taille égale)", taille = "Taille")
 sauver <- function(p, nom, l, h) {
   print(p)
   ggsave(file.path(dossier_fig, nom), p, width = l, height = h, dpi = 150,
          bg = "white")
 }
+verdicts <- tabs$tests |> select(taxon, reponse, effet, verdict)
 
-# 4a. Effet de la saison (% d'écart à la moyenne de l'espèce)
-p_sais <- tabs$saisons |>
-  mutate(taxon = lab_esp(taxon)) |>
-  ggplot(aes(saison, ecart_pct, colour = saison)) +
+# 5a. Effet de la saison (% d'écart à la moyenne de l'espèce) + verdict
+d_sais <- tabs$saisons |>
+  mutate(saison = factor(as.character(saison), levels = saisons),
+         espece = lab_esp(taxon))
+etiquettes <- d_sais |>
+  group_by(taxon, espece, reponse) |>
+  summarise(y = max(IC95_haut), .groups = "drop") |>
+  left_join(verdicts |> filter(effet == "saison"), by = c("taxon", "reponse"))
+p_sais <- ggplot(d_sais, aes(saison, ecart_pct, colour = saison)) +
   geom_hline(yintercept = 0, colour = "grey60") +
   geom_pointrange(aes(ymin = IC95_bas, ymax = IC95_haut)) +
-  facet_grid(reponse ~ taxon, scales = "free_y",
+  geom_text(aes(y = IC95_haut, label = paste0(n_traits, " tr.")), vjust = -0.6,
+            size = 2.6, colour = "grey30") +
+  geom_text(data = etiquettes, aes(x = 0.6, y = Inf, label = verdict),
+            inherit.aes = FALSE, hjust = 0, vjust = 1.4, size = 3,
+            fontface = "italic", colour = "grey20") +
+  facet_grid(reponse ~ espece, scales = "free_y",
              labeller = labeller(reponse = lab_rep)) +
+  scale_x_discrete(drop = TRUE) +
   scale_colour_manual(values = couleurs_saison, guide = "none") +
+  scale_y_continuous(expand = expansion(mult = c(0.08, 0.15))) +
   labs(title = "Effet de la saison par espèce (modèle saison + profondeur)",
-       subtitle = "Écart à la moyenne de l'espèce (%), IC 95 % ; condition = poids à taille égale",
+       subtitle = paste0("Écart à la moyenne de l'espèce (%), IC 95 % ; « tr. » = traits de chalut ; ",
+                         "saisons avec < ", n_min_traits_saison, " traits non testées"),
        x = NULL, y = "Écart (%)") +
   theme_minimal(base_size = 10) +
   theme(axis.text.x = element_text(angle = 30, hjust = 1))
 sauver(p_sais, "effet_saison_especes.png", 12, 6.5)
 
-# 4b. Effets des variables continues (% pour +1 écart-type)
-if (!is.null(tabs$effets) && nrow(tabs$effets)) {
-  eff <- tabs$effets |>
-    mutate(source = ifelse(modele == "saison", "modèle saison + profondeur",
-                           "modèle variable env. + profondeur"),
-           taxon = lab_esp(taxon),
-           significatif = p_holm < 0.05)
-  p_eff <- ggplot(eff, aes(effet_pct_par_ET, taxon, colour = variable,
-                           shape = significatif)) +
-    geom_vline(xintercept = 0, colour = "grey60") +
-    geom_pointrange(aes(xmin = IC95_bas, xmax = IC95_haut),
-                    position = position_dodge(width = 0.6)) +
-    scale_shape_manual(values = c(`TRUE` = 16, `FALSE` = 1),
-                       labels = c(`TRUE` = "p Holm < 0,05", `FALSE` = "n.s.")) +
-    facet_wrap(~ reponse, scales = "free_x", labeller = as_labeller(lab_rep)) +
-    labs(title = "Effet de +1 écart-type de chaque variable, par espèce",
-         subtitle = "Profondeur : modèle saison + profondeur ; variables Copernicus : chacune seule + profondeur",
-         x = "Variation (%) pour +1 écart-type", y = NULL, colour = NULL,
-         shape = NULL) +
-    theme_minimal(base_size = 10) +
-    theme(legend.position = "bottom", legend.box = "vertical")
-  sauver(p_eff, "effets_variables_especes.png", 11, 6.5)
-}
-
-# 4c. Comparaison des modèles (ΔAICc)
-p_aic <- tabs$selection |>
-  mutate(taxon = lab_esp(taxon),
-         modele = factor(modele, levels = unique(c("nul", "spatial", "saison",
-                                                   paste0("env_", cop))))) |>
-  ggplot(aes(modele, taxon, fill = pmin(delta_AICc, 20))) +
-  geom_tile(colour = "white") +
-  geom_text(aes(label = round(delta_AICc, 1)), size = 3) +
-  scale_fill_gradient(low = "#08519c", high = "grey95", limits = c(0, 20),
-                      name = "Delta AICc") +
-  facet_wrap(~ reponse, labeller = as_labeller(lab_rep)) +
-  labs(title = "Comparaison des modèles par espèce (Delta AICc : 0 = meilleur ; < 2 = équivalent)",
-       x = NULL, y = NULL) +
-  theme_minimal(base_size = 10) +
-  theme(axis.text.x = element_text(angle = 30, hjust = 1))
-sauver(p_aic, "comparaison_modeles.png", 11, 5.5)
-
-# 4d. Données brutes : Kn selon la profondeur, par saison
-p_brut <- ind |>
-  filter(taxon %in% especes, !is.na(Kn)) |>
-  mutate(taxon = lab_esp(taxon)) |>
-  ggplot(aes(.data[[spatiales[1]]], Kn, colour = saison)) +
-  geom_hline(yintercept = 1, linetype = 2, colour = "grey60") +
-  geom_point(alpha = 0.25, size = 0.9) +
-  geom_smooth(method = "lm", se = FALSE, formula = y ~ x) +
-  facet_wrap(~ taxon) +
-  scale_colour_manual(values = couleurs_saison) +
-  coord_cartesian(ylim = c(0.6, 1.4)) +
-  labs(title = "Condition relative (Kn) des individus selon la profondeur",
-       x = spatiales[1], y = "Kn de Le Cren", colour = NULL) +
+# 5b. Effet de la profondeur (% pour +10 m) + verdict
+p_prof <- tabs$profondeur |>
+  left_join(verdicts |> filter(effet == "profondeur"), by = c("taxon", "reponse")) |>
+  mutate(espece = lab_esp(taxon),
+         verdict = factor(verdict, levels = c("robuste", "fragile", "non significatif"))) |>
+  ggplot(aes(effet_pct_10m, espece, colour = verdict)) +
+  geom_vline(xintercept = 0, colour = "grey60") +
+  geom_pointrange(aes(xmin = IC95_bas, xmax = IC95_haut)) +
+  facet_wrap(~ reponse, scales = "free_x", labeller = as_labeller(lab_rep)) +
+  scale_colour_manual(values = c(robuste = "#1b7837", fragile = "#e08214",
+                                 `non significatif` = "grey55"), drop = FALSE) +
+  labs(title = "Effet de la profondeur par espèce (modèle saison + profondeur)",
+       subtitle = "Variation (%) pour 10 m de profondeur en plus, IC 95 %",
+       x = "Variation pour +10 m (%)", y = NULL, colour = "Verdict") +
   theme_minimal(base_size = 10) +
   theme(legend.position = "bottom")
-sauver(p_brut, "kn_profondeur_brut.png", 10, 6.5)
+sauver(p_prof, "effet_profondeur_especes.png", 10, 5)
+
+# 5c. Condition relative (Kn) par saison, saisons testées en plein
+p_kn <- ind |>
+  left_join(effectifs |> select(taxon, saison, saison_testee),
+            by = c("taxon", "saison")) |>
+  mutate(espece = lab_esp(taxon)) |>
+  ggplot(aes(saison, Kn, colour = saison, alpha = saison_testee)) +
+  geom_hline(yintercept = 1, linetype = 2, colour = "grey50") +
+  geom_boxplot(outlier.shape = NA, width = 0.55) +
+  geom_jitter(width = 0.15, size = 0.7) +
+  facet_wrap(~ espece, nrow = 1) +
+  scale_colour_manual(values = couleurs_saison, guide = "none") +
+  scale_alpha_manual(values = c(`TRUE` = 0.6, `FALSE` = 0.15), guide = "none") +
+  coord_cartesian(ylim = c(0.6, 1.4)) +
+  labs(title = "Condition relative de Le Cren (Kn) par saison",
+       subtitle = paste0("Kn = 1 : poids attendu pour la taille. Pâle : saison non testée (< ",
+                         n_min_traits_saison, " traits)"),
+       x = NULL, y = "Kn") +
+  theme_minimal(base_size = 10) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+sauver(p_kn, "condition_par_saison.png", 12, 4.5)
+
+# 5d. Distributions de tailles par saison, taille de maturité
+lm_lignes <- ind |> distinct(taxon, taille_maturite_cm) |>
+  mutate(espece = lab_esp(taxon), L50 = 10 * taille_maturite_cm)
+p_dist <- ind |>
+  group_by(taxon, saison) |>
+  mutate(poids_densite = facteur_elevation / sum(facteur_elevation)) |>
+  ungroup() |>
+  mutate(espece = lab_esp(taxon)) |>
+  ggplot(aes(taille_mm, colour = saison, fill = saison)) +
+  geom_density(aes(weight = poids_densite), alpha = 0.15, adjust = 0.8) +
+  geom_vline(data = lm_lignes, aes(xintercept = L50), linetype = 2, colour = "grey30") +
+  facet_wrap(~ espece, scales = "free", nrow = 1) +
+  scale_colour_manual(values = couleurs_saison) +
+  scale_fill_manual(values = couleurs_saison) +
+  labs(title = "Distribution des tailles par saison (effectifs élevés)",
+       subtitle = "Tirets : taille de première maturité (FishBase) ; à gauche = juvéniles",
+       x = "Longueur (mm)", y = "Densité", colour = NULL, fill = NULL) +
+  theme_minimal(base_size = 10) +
+  theme(legend.position = "bottom")
+sauver(p_dist, "distributions_tailles.png", 13, 4.5)
+
+# 5e. Moyennes par trait (vérification) : condition et taille selon la profondeur
+par_trait <- ind |>
+  group_by(taxon, trait_id, saison) |>
+  summarise(n = n(), prof = first(prof), Kn = mean(Kn),
+            L_moy = 10^mean(log_taille), .groups = "drop") |>
+  filter(n >= n_min_individus_trait) |>
+  mutate(espece = lab_esp(taxon))
+write.csv(par_trait, file.path(dossier_out, "moyennes_par_trait.csv"),
+          row.names = FALSE, fileEncoding = "UTF-8")
+p_pt <- par_trait |>
+  tidyr::pivot_longer(c(Kn, L_moy), names_to = "variable", values_to = "valeur") |>
+  mutate(variable = c(Kn = "Kn moyen", L_moy = "Taille moyenne (mm)")[variable]) |>
+  ggplot(aes(prof, valeur, colour = saison, size = n)) +
+  geom_point(alpha = 0.8) +
+  facet_grid(variable ~ espece, scales = "free_y") +
+  scale_colour_manual(values = couleurs_saison) +
+  scale_size_area(max_size = 4) +
+  labs(title = "Moyennes par trait de chalut selon la profondeur",
+       subtitle = paste0("Traits avec au moins ", n_min_individus_trait,
+                         " individus de l'espèce ; taille du point = individus"),
+       x = "Profondeur (m)", y = NULL, colour = NULL, size = "n") +
+  theme_minimal(base_size = 10) +
+  theme(legend.position = "bottom")
+sauver(p_pt, "moyennes_par_trait_profondeur.png", 13, 6)
 
 # =============================================================================
-# 5. Résumé
+# 6. Résumé
 # =============================================================================
 message("\n================ RÉSUMÉ ================")
-print(tabs$resume |> mutate(across(where(is.numeric), ~ signif(.x, 3))) |>
-        as.data.frame())
+message("Effectifs (individus / traits) :")
+print(effectifs |> mutate(across(where(is.numeric), ~ round(.x, 2))) |> as.data.frame())
+message("\nTests et verdicts :")
+print(tabs$tests |>
+        select(taxon, reponse, effet, saisons_testees, n_traits, p_holm,
+               p_niveau_trait, p_max_retrait_un_trait, p_sans_douteux, verdict) |>
+        mutate(across(where(is.numeric), ~ signif(.x, 2))) |> as.data.frame())
+message("\nCroissance apparente :")
+print(croissance |> mutate(across(where(is.numeric), ~ round(.x, 2))))
 message("\nDétails : ", dossier_out)
