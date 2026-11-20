@@ -146,6 +146,12 @@ traits_douteux <- c(
 )
 exclure_traits_douteux <- FALSE  # TRUE = retirés des tables d'analyse
 
+# Colonne « Sous-échantillonnage » des fiches : FALSE = elle indique seulement
+# que les mesures ont porté sur une partie des individus, tout le contenu des
+# sachets ayant été trié et compté (cas du TP). TRUE = seule cette fraction de
+# la capture a été triée, et les effectifs sont multipliés en conséquence.
+appliquer_sous_echantillonnage <- FALSE
+
 # Seuil de détection des individus aberrants sur la relation taille-poids
 # (résidus studentisés de log(poids) ~ log(taille), par taxon)
 seuil_aberrant_taille_poids <- 4

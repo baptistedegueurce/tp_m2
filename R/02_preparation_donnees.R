@@ -100,7 +100,13 @@ traits <- meta |>
     distance_gps_km     = haversine_km(filage_lat_N, filage_lon,
                                        virage_lat_N, virage_lon),
     distance_vitesse_km = vitesse_noeuds * 1.852 * duree_min / 60,
-    fraction_sous_ech   = lire_fraction(coalesce(sous_echantillonnage, "")),
+    # Fraction triée du trait. La colonne « Sous-échantillonnage » des fiches
+    # signale seulement que les MESURES ont porté sur une partie des
+    # individus : tout le contenu des sachets a été trié et compté (confirmé
+    # par l'équipe). L'élévation effectif / mesurés suffit donc, et la
+    # fraction vaut 1 sauf si `appliquer_sous_echantillonnage` est TRUE.
+    fraction_sous_ech   = if (appliquer_sous_echantillonnage)
+      lire_fraction(coalesce(sous_echantillonnage, "")) else 1,
     douteux        = trait_id %in% names(traits_douteux),
     raison_douteux = unname(traits_douteux[trait_id])
   )
@@ -136,14 +142,14 @@ for (i in which(!is.na(traits$commentaire) & grepl("corrig", traits$commentaire)
   signaler("correction_fiche", traits$commentaire[i],
            traits$saison[i], traits$station[i], action = "Valeur corrigée")
 }
-for (i in which(traits$fraction_sous_ech < 1)) {
+for (i in which(!is.na(traits$sous_echantillonnage) &
+                 nzchar(trimws(traits$sous_echantillonnage)))) {
   signaler("sous_echantillonnage",
-           sprintf("Fraction %s : effectifs multipliés par %g",
-                   traits$sous_echantillonnage[i], 1 / traits$fraction_sous_ech[i]),
+           sprintf("Fiche : « %s »", traits$sous_echantillonnage[i]),
            traits$saison[i], traits$station[i],
-           action = if (grepl("sachet", traits$sous_echantillonnage[i]))
-             "Appliqué à tout le trait alors qu'un seul sachet est concerné : à vérifier"
-           else "Hypothèse : les effectifs saisis sont ceux du sous-échantillon")
+           action = if (appliquer_sous_echantillonnage)
+             sprintf("Effectifs multipliés par %g", 1 / traits$fraction_sous_ech[i])
+           else "Mesures sur une partie des individus, tout a été compté : pas de correction")
 }
 
 # Distance retenue : GPS (à défaut, vitesse × durée)
