@@ -324,12 +324,12 @@ traits <- traits |>
     trait_id %in% traits_avec_donnees    ~ "echantillonne",
     trait_id %in% traits_vides_confirmes ~ "vide_confirme",
     is.na(nb_sachets)                    ~ "pas_d_echantillon",
-    TRUE                                 ~ "saisie_manquante"
+    TRUE                                 ~ "donnees_indisponibles"
   ))
-for (i in which(traits$statut %in% c("pas_d_echantillon", "saisie_manquante"))) {
+for (i in which(traits$statut %in% c("pas_d_echantillon", "donnees_indisponibles"))) {
   signaler(traits$statut[i],
-           if (traits$statut[i] == "saisie_manquante")
-             sprintf("%d sachet(s) sur la fiche mais aucune ligne dans la base",
+           if (traits$statut[i] == "donnees_indisponibles")
+             sprintf("%d sachet(s) sur la fiche, données non disponibles",
                      traits$nb_sachets[i])
            else "Aucun sachet (« – » sur la fiche) et aucune ligne dans la base",
            traits$saison[i], traits$station[i],
@@ -443,7 +443,7 @@ p_carte <- ggplot(traits) +
   scale_colour_manual(values = c(echantillonne = "#1b7837",
                                  vide_confirme = "#5aae61",
                                  pas_d_echantillon = "grey60",
-                                 saisie_manquante = "#d73027")) +
+                                 donnees_indisponibles = "#d73027")) +
   coord_quickmap() +
   labs(title = "Traits de chalut par saison", x = "Longitude (°)",
        y = "Latitude (°)", colour = NULL) +
