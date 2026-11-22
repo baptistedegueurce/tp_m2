@@ -36,7 +36,10 @@ selection$var     <- selection[[paste0("var_", suffixe)]]
 selection$dataset <- selection[[paste0("dataset_", suffixe)]]
 
 periodes <- periodes_contigues(annees, mois)
-exe      <- trouver_copernicusmarine(chemin_copernicusmarine)
+# La toolbox n'est nécessaire que s'il reste des fichiers à télécharger
+# (fichiers .nc déjà présents dans data/raw/copernicus : lecture directe)
+exe <- tryCatch(trouver_copernicusmarine(chemin_copernicusmarine),
+                error = function(e) e)
 
 message("Zone : lon [", zone$lon_min, " ; ", zone$lon_max, "], lat [",
         zone$lat_min, " ; ", zone$lat_max, "]")

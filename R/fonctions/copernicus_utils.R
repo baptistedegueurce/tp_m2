@@ -132,6 +132,7 @@ telecharger_subset <- function(exe, dataset_id, variables, zone,
     args <- c(args, "--minimum-depth", prof_min, "--maximum-depth", prof_max)
   }
 
+  if (inherits(exe, "error")) stop(conditionMessage(exe), call. = FALSE)
   message("  ↓ ", dataset_id, " [", paste(variables, collapse = ", "), "] ", periode)
   statut <- system2(exe, args)
   if (!identical(statut, 0L) || !file.exists(fichier)) {
